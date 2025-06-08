@@ -1,46 +1,99 @@
 # Security Incident Triage Assistant CLI
 
-A persistent chat interface for Azure OpenAI Assistant with session management, designed specifically for security incident analysis and triage.
+A persistent chat interface for Azure OpenAI Assistant with remote MCP (Model Context Protocol) integration for Azure security tools.
 
-## Features
+## 🏗️ Architecture
 
-✅ **Persistent Sessions**: Automatically saves and restores your assistant and conversation threads  
+This solution consists of two separate components:
+
+### 1. **CLI Assistant** (This Repository)
+- Azure OpenAI-powered security assistant
+- Persistent chat interface with session management  
+- MCP client that connects to remote security tools
+- Runs locally on analyst workstations
+
+### 2. **MCP Server** (Separate Azure Infrastructure)
+- HTTP-based Model Context Protocol server
+- Provides Azure security tools (Sentinel, Entra ID, Graph)
+- Deployed on Azure Container Apps or similar
+- Secured with API key authentication
+
+```
+┌─────────────────┐    HTTPS/API Key    ┌─────────────────┐
+│   CLI Assistant │ ◄─────────────────► │   MCP Server    │
+│   (This Repo)   │                     │  (Azure Infra)  │
+│                 │                     │                 │
+│ • Chat Interface│                     │ • Security Tools│
+│ • Session Mgmt  │                     │ • Azure Auth    │
+│ • OpenAI Client │                     │ • Sentinel API  │
+└─────────────────┘                     └─────────────────┘
+```
+
+## ✨ Features
+
+✅ **Persistent Sessions**: Automatically saves and restores conversations  
 ✅ **Cross-Platform**: Works on Windows, Linux, and macOS  
-✅ **Interactive CLI**: Full-featured command-line interface with helpful commands  
-✅ **Error Handling**: Robust error handling and graceful recovery  
-✅ **Session Management**: Maintains context across multiple sessions  
-✅ **Security Focus**: Specialized for security incident analysis and KQL queries  
+✅ **Interactive CLI**: Full-featured command-line interface  
+✅ **Remote MCP**: Connects to production MCP server infrastructure  
+✅ **Security Focus**: Specialized for security incident analysis  
+✅ **Robust Error Handling**: Graceful recovery and helpful messages
 
 ## Prerequisites
 
-- Python 3.7 or higher
+- Python 3.8 or higher
 - Azure OpenAI account with deployed model
-- Azure OpenAI API key and endpoint
+- Access to a deployed MCP server with Azure security tools
+- MCP server API key for authentication
 
 ## Setup
 
-1. **Clone or download this repository**
+### 1. Install Dependencies
 
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+```powershell
+# Install CLI dependencies
+pip install -r requirements.txt
+```
 
-3. **Create a `.env` file** in the project directory with your Azure OpenAI credentials:
-   ```env
-   ENDPOINT_URL=https://your-resource.openai.azure.com/
-   AZURE_OPENAI_API_KEY=your_api_key_here
-   ```
+### 2. Configure Environment
 
-4. **Run the assistant:**
-   ```bash
-   python assitant.py
-   ```
-   
-   Or use the launcher script:
-   ```bash
-   python run_assistant.py
-   ```
+Copy the example environment file and configure it:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Edit `.env` with your configuration:
+
+```env
+# Azure OpenAI Configuration
+ENDPOINT_URL=https://your-azure-openai-instance.openai.azure.com/
+AZURE_OPENAI_API_KEY=your-azure-openai-key
+DEPLOYMENT_NAME=your-gpt-model-deployment-name
+
+# Remote MCP Server Configuration
+MCP_SERVER_URL=https://your-mcp-server.azurecontainerapps.io
+MCP_API_KEY=your-secure-api-key-here
+```
+
+### 3. MCP Server Infrastructure
+
+The MCP server must be deployed separately on Azure infrastructure with:
+- Azure Sentinel workspace access
+- Entra ID permissions
+- Log Analytics workspace connectivity
+- API key authentication enabled
+
+### 4. Start the Assistant
+
+```powershell
+python assitant.py
+```
+
+Or use the launcher script:
+
+```powershell
+python run_assistant.py
+```
 
 ## Usage
 
@@ -48,9 +101,13 @@ A persistent chat interface for Azure OpenAI Assistant with session management, 
 
 When you first run the application, it will:
 - Connect to Azure OpenAI
+- Attempt to connect to the remote MCP server
+- Load available Azure security tools from the MCP server
 - Create a new security assistant (or restore existing one)
 - Start a new conversation thread (or continue previous one)
 - Display a welcome message with available commands
+
+The assistant will work without MCP server connection but with limited functionality.
 
 ### Commands
 
@@ -86,17 +143,53 @@ The assistant automatically manages sessions through a hidden file in your home 
 
 ```
 chat-development/
-├── assitant.py           # Main CLI application
-├── run_assistant.py      # Launcher script with checks
-├── requirements.txt      # Python dependencies
-├── .env                 # Azure OpenAI credentials (you create this)
-└── README.md           # This file
+├── assitant.py           # Main CLI application (remote MCP client)
+├── run_assistant.py      # Launcher script with dependency checks
+├── requirements.txt      # Python dependencies for CLI
+├── .env.example         # Environment template for remote configuration
+├── README.md           # This file
+└── mcp-server/         # MCP server reference implementation
+    ├── main.py          # Original stdio MCP server
+    ├── http_server.py   # Production HTTP MCP server
+    ├── requirements.txt # MCP server dependencies
+    └── Dockerfile       # Container configuration for deployment
 ```
 
 ## Dependencies
 
 - `openai` - Azure OpenAI Python SDK
 - `python-dotenv` - Environment variable management
+- `aiohttp` - HTTP client for MCP server communication
+
+## MCP Server Deployment
+
+This repository includes a reference implementation of the MCP server in the `mcp-server/` directory. To deploy the MCP server to Azure:
+
+### Option 1: Azure Container Apps
+
+1. Build and push the container:
+```powershell
+# Build the container
+docker build -t your-registry/azure-security-mcp:latest ./mcp-server
+
+# Push to Azure Container Registry
+docker push your-registry/azure-security-mcp:latest
+```
+
+2. Deploy to Container Apps with proper environment variables and Managed Identity
+
+### Option 2: Azure Functions or App Service
+
+Deploy the `http_server.py` as a web application with the appropriate Azure authentication configuration.
+
+### MCP Server Environment Variables
+
+The deployed MCP server requires:
+- `AZURE_TENANT_ID` - Azure tenant ID
+- `LOG_ANALYTICS_WORKSPACE_ID` - Log Analytics workspace ID
+- `MCP_API_KEY` - API key for authentication
+- `MCP_AUTH_REQUIRED=true` - Enable authentication
+- Azure authentication via Managed Identity or Service Principal
 
 ## Cross-Platform Support
 
