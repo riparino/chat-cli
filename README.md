@@ -86,7 +86,7 @@ The MCP server must be deployed separately on Azure infrastructure with:
 ### 4. Start the Assistant
 
 ```powershell
-python assitant.py
+python assistant.py
 ```
 
 Or use the launcher script:
@@ -143,7 +143,7 @@ The assistant automatically manages sessions through a hidden file in your home 
 
 ```
 chat-development/
-├── assitant.py           # Main CLI application (remote MCP client)
+├── assistant.py           # Main CLI application (remote MCP client)
 ├── run_assistant.py      # Launcher script with dependency checks
 ├── requirements.txt      # Python dependencies for CLI
 ├── .env.example         # Environment template for remote configuration
@@ -195,8 +195,8 @@ The deployed MCP server requires:
 
 This CLI works on all major platforms:
 
-- **Windows**: Run with `python assitant.py` or `py assitant.py`
-- **Linux/macOS**: Run with `python3 assitant.py` or make executable with `chmod +x assitant.py && ./assitant.py`
+- **Windows**: Run with `python assistant.py` or `py assistant.py`
+- **Linux/macOS**: Run with `python3 assistant.py` or make executable with `chmod +x assistant.py && ./assistant.py`
 
 ## Security Features
 
