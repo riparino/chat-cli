@@ -34,7 +34,7 @@ A persistent chat interface for Azure OpenAI Assistant with session management, 
 
 4. **Run the assistant:**
    ```bash
-   python assitant.py
+   python assistant.py
    ```
    
    Or use the launcher script:
@@ -86,7 +86,7 @@ The assistant automatically manages sessions through a hidden file in your home 
 
 ```
 chat-development/
-├── assitant.py           # Main CLI application
+├── assistant.py           # Main CLI application
 ├── run_assistant.py      # Launcher script with checks
 ├── requirements.txt      # Python dependencies
 ├── .env                 # Azure OpenAI credentials (you create this)
@@ -102,8 +102,8 @@ chat-development/
 
 This CLI works on all major platforms:
 
-- **Windows**: Run with `python assitant.py` or `py assitant.py`
-- **Linux/macOS**: Run with `python3 assitant.py` or make executable with `chmod +x assitant.py && ./assitant.py`
+- **Windows**: Run with `python assistant.py` or `py assistant.py`
+- **Linux/macOS**: Run with `python3 assistant.py` or make executable with `chmod +x assistant.py && ./assistant.py`
 
 ## Security Features
 

@@ -64,7 +64,7 @@ def main():
     
     # Launch the assistant
     try:
-        from assitant import main as assistant_main
+        from assistant import main as assistant_main
         assistant_main()
     except KeyboardInterrupt:
         print("\n👋 Assistant stopped by user.")
