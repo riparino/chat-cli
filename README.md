@@ -85,7 +85,7 @@ The assistant automatically manages sessions through a hidden file in your home 
 ## File Structure
 
 ```
-chat-development/
+chat-cli/
 ├── assistant.py           # Main CLI application
 ├── run_assistant.py      # Launcher script with checks
 ├── requirements.txt      # Python dependencies
