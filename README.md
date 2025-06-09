@@ -15,7 +15,8 @@ A persistent chat interface for Azure OpenAI Assistant with session management, 
 
 - Python 3.7 or higher
 - Azure OpenAI account with deployed model
-- Azure OpenAI API key and endpoint
+- Azure subscription with Entra ID authentication configured
+- Appropriate Azure RBAC permissions for Azure OpenAI
 
 ## Setup
 
@@ -26,13 +27,18 @@ A persistent chat interface for Azure OpenAI Assistant with session management, 
    pip install -r requirements.txt
    ```
 
-3. **Create a `.env` file** in the project directory with your Azure OpenAI credentials:
+3. **Configure Azure authentication** (choose one method):
+   - **Azure CLI**: Run `az login` to authenticate
+   - **Service Principal**: Set environment variables `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
+   - **Managed Identity**: If running on Azure compute resources
+
+4. **Create a `.env` file** in the project directory with your Azure OpenAI endpoint:
    ```env
    ENDPOINT_URL=https://your-resource.openai.azure.com/
-   AZURE_OPENAI_API_KEY=your_api_key_here
+   DEPLOYMENT_NAME=your_model_deployment_name
    ```
 
-4. **Run the assistant:**
+5. **Run the assistant:**
    ```bash
    python assistant.py
    ```

@@ -39,19 +39,27 @@ class SecurityAssistantCLI:
         """Initialize Azure OpenAI client with proper error handling"""
         try:
             endpoint = os.getenv("ENDPOINT_URL")
-            api_key = os.getenv("AZURE_OPENAI_API_KEY")
             
-            if not endpoint or not api_key:
-                print("❌ Error: Missing required environment variables.")
-                print("Please ensure ENDPOINT_URL and AZURE_OPENAI_API_KEY are set in your .env file.")
+            if not endpoint:
+                print("❌ Error: Missing required environment variable ENDPOINT_URL.")
+                print("Please ensure ENDPOINT_URL is set in your .env file.")
                 sys.exit(1)
             
+            # Import Azure Identity components
+            from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+            
+            # Initialize token provider for Entra ID authentication
+            token_provider = get_bearer_token_provider(
+                DefaultAzureCredential(),
+                "https://cognitiveservices.azure.com/.default"
+            )
+            
             self.client = AzureOpenAI(
+                azure_ad_token_provider=token_provider,
                 azure_endpoint=endpoint,
-                api_key=api_key,
                 api_version="2024-05-01-preview"
             )
-            print("✅ Connected to Azure OpenAI")
+            print("✅ Connected to Azure OpenAI with Entra ID authentication")
             
         except Exception as e:
             print(f"❌ Failed to initialize Azure OpenAI client: {e}")

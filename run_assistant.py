@@ -32,16 +32,16 @@ def check_env_file():
         print("❌ .env file not found!")
         print("📝 Please create a .env file with the following variables:")
         print("   ENDPOINT_URL=your_azure_openai_endpoint")
-        print("   AZURE_OPENAI_API_KEY=your_api_key")
+        print("   DEPLOYMENT_NAME=your_model_deployment_name")
         return False
     
     # Check if required variables are present
     with open(env_file, 'r') as f:
         content = f.read()
-        if "ENDPOINT_URL" not in content or "AZURE_OPENAI_API_KEY" not in content:
+        if "ENDPOINT_URL" not in content:
             print("⚠️  .env file exists but missing required variables:")
             print("   ENDPOINT_URL=your_azure_openai_endpoint")
-            print("   AZURE_OPENAI_API_KEY=your_api_key")
+            print("   DEPLOYMENT_NAME=your_model_deployment_name")
             return False
     
     return True
