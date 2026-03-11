@@ -57,8 +57,8 @@ class JSMClient:
                 self._session.headers["Authorization"] = f"Bearer {token}"
                 self._base_url = self._oauth.get_api_base()
                 return
-            except Exception:
-                pass  # fall through to next method
+            except Exception as exc:
+                print(f"  Warning: OAuth 2.0 login failed ({exc}); falling back to API token auth")
 
         # 2. Raw bearer token env var
         raw_bearer = os.getenv("ATLASSIAN_OAUTH_TOKEN")
@@ -166,7 +166,11 @@ class JSMClient:
         limit: int = 50,
         start: int = 0,
     ) -> list[Ticket]:
-        """Retrieve tickets from a JSM queue."""
+        """Retrieve tickets from a JSM queue.
+
+        The queue endpoint already returns full issue fields, so we parse them
+        directly instead of issuing a separate GET per ticket (avoids N+1).
+        """
         data = self._get(
             f"/rest/servicedeskapi/servicedesk/{service_desk_id}/queue/{queue_id}/issue",
             start=start,
@@ -174,12 +178,10 @@ class JSMClient:
         )
         tickets = []
         for issue in data.get("values", []):
-            key = issue.get("key", "")
             try:
-                ticket = self.get_ticket(key)
-                tickets.append(ticket)
+                tickets.append(Ticket.from_jira_api(issue))
             except Exception as exc:
-                print(f"  Warning: could not fetch {key}: {exc}")
+                print(f"  Warning: could not parse {issue.get('key', '?')}: {exc}")
         return tickets
 
     def search_tickets(self, jql: str, limit: int = 50, start: int = 0) -> list[Ticket]:
@@ -227,8 +229,8 @@ class JSMClient:
             },
         )
 
-    def add_wiki_comment(self, issue_key: str, wiki_text: str) -> dict:
-        """Add a comment using Jira wiki markup (converts to ADF paragraphs)."""
+    def add_multiline_comment(self, issue_key: str, wiki_text: str) -> dict:
+        """Add a plain-text multi-line comment, converting each line to an ADF paragraph."""
         # Split by newlines and create ADF paragraph nodes
         paragraphs = []
         for line in wiki_text.split("\n"):
@@ -296,4 +298,4 @@ class JSMClient:
     def test_connection(self) -> str:
         """Verify credentials and return the cloud site name."""
         data = self._get("/rest/api/3/serverInfo")
-        return data.get("baseUrl", self._domain)
+        return data.get("baseUrl", self._base_url or "")

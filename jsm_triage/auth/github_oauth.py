@@ -93,7 +93,7 @@ class GitHubOAuth:
         try:
             webbrowser.open(verify_url)
         except Exception:
-            pass
+            print(f"  (Could not open browser automatically – please visit the URL above)")
 
         # Step 2: poll for token
         deadline = time.time() + expires_in

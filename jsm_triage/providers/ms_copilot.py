@@ -16,12 +16,10 @@ Optional:
     MS_COPILOT_MODEL       model name (e.g. gpt-4o, Phi-3-medium-128k-instruct)
 """
 
-import json
 import os
 from typing import Optional
 
-from .base import AIProvider, TriageResult, ProviderError
-from .azure_openai import _parse_triage_json
+from .base import AIProvider, TriageResult, ProviderError, parse_triage_json
 
 DEFAULT_MODEL = "gpt-4o"
 
@@ -71,7 +69,7 @@ class MSCopilotProvider(AIProvider):
     def is_available(self) -> bool:
         return bool(os.getenv("MS_COPILOT_ENDPOINT"))
 
-    def triage_ticket(self, ticket_data: dict, system_prompt: str, user_prompt: str) -> TriageResult:
+    def triage_ticket(self, system_prompt: str, user_prompt: str) -> TriageResult:
         if not self._client:
             self._build_client()
 
@@ -89,7 +87,7 @@ class MSCopilotProvider(AIProvider):
                 model_extras={"response_format": {"type": "json_object"}},
             )
             raw = response.choices[0].message.content
-            return _parse_triage_json(raw, self.name)
+            return parse_triage_json(raw, self.name)
         except Exception as exc:
             raise ProviderError(f"Microsoft Copilot triage failed: {exc}") from exc
 

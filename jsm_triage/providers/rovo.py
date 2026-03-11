@@ -22,7 +22,7 @@ from typing import Optional
 
 import requests
 
-from .base import AIProvider, TriageResult, ProviderError
+from .base import AIProvider, TriageResult, ProviderError, parse_triage_json
 
 ROVO_CHAT_API = "https://api.atlassian.com/rovo/v1/chats"
 
@@ -63,7 +63,7 @@ class RovoProvider(AIProvider):
             os.getenv("ATLASSIAN_API_TOKEN"),
         ])
 
-    def triage_ticket(self, ticket_data: dict, system_prompt: str, user_prompt: str) -> TriageResult:
+    def triage_ticket(self, system_prompt: str, user_prompt: str) -> TriageResult:
         if not self._session:
             self._build_session()
 
@@ -147,9 +147,8 @@ def _parse_rovo_response(raw: str, provider_name: str) -> TriageResult:
     clean = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
 
     try:
-        data = json.loads(clean)
-        from .azure_openai import _parse_triage_json
-        return _parse_triage_json(json.dumps(data), provider_name)
+        json.loads(clean)  # validate JSON; pass original string to avoid double serialise
+        return parse_triage_json(clean, provider_name)
     except (json.JSONDecodeError, ValueError):
         pass
 

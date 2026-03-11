@@ -43,7 +43,7 @@ from .triage_engine import TriageEngine, build_provider_chain
 from .jsm.client import JSMClient
 from .jsm.models import Ticket
 from .providers.base import TriageResult
-from .auth import AtlassianOAuth, AzureOAuth, GitHubOAuth
+from .auth import AtlassianOAuth, AzureOAuth, GitHubOAuth, PROVIDER_LABELS
 from .auth.token_store import TokenStore
 
 # Shared token store instance for the whole process
@@ -132,12 +132,8 @@ def cmd_auth(args, *_):
             print("  Logged out all providers")
 
     def do_status():
-        from .auth.atlassian_oauth import PROVIDER_KEY as ATL_KEY
-        from .auth.azure_oauth import PROVIDER_KEY as AZ_KEY
-        from .auth.github_oauth import PROVIDER_KEY as GH_KEY
-
         print("\n  Stored OAuth tokens:")
-        for key, label in [(ATL_KEY, "Atlassian"), (AZ_KEY, "Azure"), (GH_KEY, "GitHub")]:
+        for key, label in PROVIDER_LABELS:
             entry = _token_store.get(key)
             if entry:
                 if _token_store.is_expired(key):
@@ -165,31 +161,18 @@ def cmd_auth(args, *_):
 def cmd_status(args, engine: TriageEngine, jsm: Optional[JSMClient]):
     _print_banner()
 
-    print("\n  AI Providers:")
-    from .providers.azure_openai import AzureOpenAIProvider
-    from .providers.github_copilot import GitHubCopilotProvider
-    from .providers.openai_direct import OpenAIProvider
-    from .providers.ms_copilot import MSCopilotProvider
-    from .providers.rovo import RovoProvider
-
-    all_providers = [
-        AzureOpenAIProvider(),
-        GitHubCopilotProvider(github_oauth=GitHubOAuth(_token_store)),
-        OpenAIProvider(),
-        MSCopilotProvider(),
-        RovoProvider(),
+    _ALL_PROVIDER_NAMES = [
+        "Azure OpenAI", "GitHub Copilot", "OpenAI (ChatGPT)",
+        "Microsoft Copilot", "Atlassian Rovo",
     ]
-
     active_names = {p.name for p in engine.providers}
-    for p in all_providers:
-        status = "✅ configured" if p.name in active_names else "⬜ not configured"
-        print(f"    {status}  {p.name}")
+    print("\n  AI Providers:")
+    for name in _ALL_PROVIDER_NAMES:
+        status = "✅ configured" if name in active_names else "⬜ not configured"
+        print(f"    {status}  {name}")
 
     print("\n  OAuth sessions (run 'jsm-triage auth status' for details):")
-    from .auth.atlassian_oauth import PROVIDER_KEY as ATL_KEY
-    from .auth.azure_oauth import PROVIDER_KEY as AZ_KEY
-    from .auth.github_oauth import PROVIDER_KEY as GH_KEY
-    for key, label in [(ATL_KEY, "Atlassian"), (AZ_KEY, "Azure"), (GH_KEY, "GitHub")]:
+    for key, label in PROVIDER_LABELS:
         state = "logged in" if _token_store.get(key) and not _token_store.is_expired(key) else "not logged in"
         print(f"    {label}: {state}")
 
@@ -266,7 +249,8 @@ def cmd_triage(args, engine: TriageEngine, jsm: Optional[JSMClient]):
     for ticket in tickets:
         print(f"  Analysing {ticket.key}…", end=" ", flush=True)
         try:
-            if jsm and not args.dry_run:
+            if jsm:
+                # engine.dry_run controls whether writes happen
                 result = engine.triage_and_apply(
                     ticket, jsm,
                     post_comment=not args.no_comment,
@@ -299,6 +283,7 @@ def cmd_watch(args, engine: TriageEngine, jsm: Optional[JSMClient]):
     print(f"  Polling every {args.interval}s  |  Ctrl-C to stop\n")
 
     seen: set[str] = set()
+    SEEN_CAP = 10_000   # prevent unbounded growth in long-running watch sessions
     stop = [False]
 
     def _sigint(sig, frame):
@@ -316,6 +301,10 @@ def cmd_watch(args, engine: TriageEngine, jsm: Optional[JSMClient]):
                 print(f"  {time.strftime('%H:%M:%S')} – {len(new_tickets)} new ticket(s)")
                 for ticket in new_tickets:
                     seen.add(ticket.key)
+                    if len(seen) > SEEN_CAP:
+                        # Drop the oldest quarter to keep memory bounded
+                        to_drop = list(seen)[:SEEN_CAP // 4]
+                        seen.difference_update(to_drop)
                     print(f"    Triaging {ticket.key}…", end=" ", flush=True)
                     try:
                         engine.triage_and_apply(
@@ -352,6 +341,7 @@ def cmd_chat(args, engine: TriageEngine, jsm: Optional[JSMClient]):
     print("  Type 'quit' or Ctrl-C to exit\n")
 
     history: list[dict] = []
+    MAX_HISTORY = 40  # keep last 40 messages (~20 turns) to avoid context overflow
 
     while True:
         try:
@@ -367,6 +357,10 @@ def cmd_chat(args, engine: TriageEngine, jsm: Optional[JSMClient]):
             break
 
         history.append({"role": "user", "content": user_input})
+        # Trim oldest pairs to stay within context limits
+        if len(history) > MAX_HISTORY:
+            history = history[-MAX_HISTORY:]
+
         try:
             reply = engine.chat(history, ticket_context=ticket)
             history.append({"role": "assistant", "content": reply})
@@ -413,6 +407,12 @@ def _build_parser() -> argparse.ArgumentParser:
     # status
     sub.add_parser("status", help="Show provider and JSM connection status")
 
+    def _add_write_args(p):
+        """Shared JSM write-back flags used by both triage and watch."""
+        p.add_argument("--no-comment", action="store_true", help="Do not post AI comment to ticket")
+        p.add_argument("--no-label", action="store_true", help="Do not add ai-triaged label")
+        p.add_argument("--update-priority", action="store_true", help="Overwrite ticket priority field")
+
     # triage
     triage = sub.add_parser("triage", help="Triage one or more tickets")
     triage.add_argument("ticket_keys", nargs="*", metavar="TICKET", help="e.g. IT-42 IT-43")
@@ -420,10 +420,8 @@ def _build_parser() -> argparse.ArgumentParser:
     triage.add_argument("--queue", "-q", metavar="ID")
     triage.add_argument("--jql", metavar="JQL", help="JQL query to select tickets")
     triage.add_argument("--limit", "-l", type=int, default=20)
-    triage.add_argument("--no-comment", action="store_true", help="Do not post AI comment to ticket")
-    triage.add_argument("--no-label", action="store_true", help="Do not add ai-triaged label")
-    triage.add_argument("--update-priority", action="store_true", help="Overwrite ticket priority")
     triage.add_argument("--output-json", metavar="FILE", help="Save results as JSON file")
+    _add_write_args(triage)
 
     # watch
     watch = sub.add_parser("watch", help="Watch a queue and auto-triage new tickets")
@@ -431,9 +429,7 @@ def _build_parser() -> argparse.ArgumentParser:
     watch.add_argument("--queue", "-q", metavar="ID", required=True)
     watch.add_argument("--interval", "-i", type=int, default=60, help="Poll interval in seconds")
     watch.add_argument("--limit", "-l", type=int, default=50)
-    watch.add_argument("--no-comment", action="store_true")
-    watch.add_argument("--no-label", action="store_true")
-    watch.add_argument("--update-priority", action="store_true")
+    _add_write_args(watch)
 
     # chat
     chat = sub.add_parser("chat", help="Interactive chat (optionally anchored to a ticket)")
@@ -459,31 +455,28 @@ def main():
         cmd_auth(args)
         return
 
-    # Build provider chain (inject OAuth instances for OAuth-capable providers)
+    # Build OAuth helpers, then pass pre-built provider instances so no
+    # monkey-patching is needed.
     preferred = [p.strip() for p in args.provider.split(",")] if args.provider else None
 
-    # Pass OAuth helpers into provider constructors that support them
-    from .providers.github_copilot import GitHubCopilotProvider
     from .providers.azure_openai import AzureOpenAIProvider
+    from .providers.github_copilot import GitHubCopilotProvider
+    from .providers.openai_direct import OpenAIProvider
+    from .providers.ms_copilot import MSCopilotProvider
+    from .providers.rovo import RovoProvider
 
-    gh_oauth = GitHubOAuth(_token_store)
     az_oauth = AzureOAuth(_token_store)
+    gh_oauth = GitHubOAuth(_token_store)
 
-    # Temporarily override provider constructors to inject OAuth
-    _orig_gh_init = GitHubCopilotProvider.__init__
-    _orig_az_init = AzureOpenAIProvider.__init__
+    provider_instances = {
+        "azure_openai":   AzureOpenAIProvider(azure_oauth=az_oauth),
+        "github_copilot": GitHubCopilotProvider(github_oauth=gh_oauth),
+        "openai":         OpenAIProvider(),
+        "ms_copilot":     MSCopilotProvider(),
+        "rovo":           RovoProvider(),
+    }
 
-    def _gh_init_with_oauth(self_inner):
-        _orig_gh_init(self_inner, github_oauth=gh_oauth)
-
-    def _az_init_with_oauth(self_inner):
-        _orig_az_init(self_inner)
-        self_inner._azure_oauth = az_oauth
-
-    GitHubCopilotProvider.__init__ = _gh_init_with_oauth
-
-    providers = build_provider_chain(preferred)
-    GitHubCopilotProvider.__init__ = _orig_gh_init  # restore
+    providers = build_provider_chain(preferred, instances=provider_instances)
 
     if not providers:
         print("❌ No AI providers configured.")

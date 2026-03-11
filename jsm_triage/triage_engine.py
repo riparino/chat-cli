@@ -71,14 +71,20 @@ _PROVIDER_ENV_HINTS = {
 }
 
 
-def build_provider_chain(preferred_order: Optional[list[str]] = None) -> list[AIProvider]:
+def build_provider_chain(
+    preferred_order: Optional[list[str]] = None,
+    instances: Optional[dict[str, "AIProvider"]] = None,
+) -> list[AIProvider]:
     """
-    Instantiate and return available providers in preference order.
+    Return available providers in preference order.
 
     Args:
-        preferred_order: list of provider names, e.g.
+        preferred_order: Provider name list, e.g.
             ["azure_openai", "github_copilot", "openai", "ms_copilot", "rovo"]
             Defaults to env var TRIAGE_PROVIDER_ORDER or the order above.
+        instances: Pre-built provider objects keyed by name.  Use this to inject
+            OAuth-authenticated providers from the CLI without monkey-patching.
+            Names not present in *instances* get a default-constructed instance.
     """
     from .providers.azure_openai import AzureOpenAIProvider
     from .providers.github_copilot import GitHubCopilotProvider
@@ -86,28 +92,32 @@ def build_provider_chain(preferred_order: Optional[list[str]] = None) -> list[AI
     from .providers.ms_copilot import MSCopilotProvider
     from .providers.rovo import RovoProvider
 
-    all_providers: dict[str, type] = {
-        "azure_openai": AzureOpenAIProvider,
+    default_classes: dict[str, type] = {
+        "azure_openai":   AzureOpenAIProvider,
         "github_copilot": GitHubCopilotProvider,
-        "openai": OpenAIProvider,
-        "ms_copilot": MSCopilotProvider,
-        "rovo": RovoProvider,
+        "openai":         OpenAIProvider,
+        "ms_copilot":     MSCopilotProvider,
+        "rovo":           RovoProvider,
     }
 
     if preferred_order is None:
         env_order = os.getenv("TRIAGE_PROVIDER_ORDER", "")
-        if env_order:
-            preferred_order = [p.strip() for p in env_order.split(",") if p.strip()]
-        else:
-            preferred_order = list(all_providers.keys())
+        preferred_order = (
+            [p.strip() for p in env_order.split(",") if p.strip()]
+            if env_order
+            else list(default_classes.keys())
+        )
 
+    instances = instances or {}
     chain: list[AIProvider] = []
     for name in preferred_order:
-        cls = all_providers.get(name)
-        if cls is None:
-            print(f"  Warning: unknown provider '{name}' – skipping")
-            continue
-        provider = cls()
+        provider = instances.get(name)
+        if provider is None:
+            cls = default_classes.get(name)
+            if cls is None:
+                print(f"  Warning: unknown provider '{name}' – skipping")
+                continue
+            provider = cls()
         if provider.is_available():
             chain.append(provider)
         else:
@@ -160,7 +170,6 @@ class TriageEngine:
         for provider in self.providers:
             try:
                 result = provider.triage_ticket(
-                    ticket_data=ticket.to_triage_dict(),
                     system_prompt=self._system_prompt,
                     user_prompt=user_prompt,
                 )
@@ -202,8 +211,7 @@ class TriageEngine:
 
         if post_comment:
             try:
-                comment_body = self._format_comment(result)
-                jsm_client.add_wiki_comment(ticket.key, comment_body)
+                jsm_client.add_multiline_comment(ticket.key, result.to_plaintext_comment())
             except Exception as exc:
                 print(f"  Warning: could not post comment to {ticket.key}: {exc}")
 
@@ -255,32 +263,3 @@ class TriageEngine:
 
         raise RuntimeError("All providers failed for chat:\n" + "\n".join(errors))
 
-    # ------------------------------------------------------------------
-    # Formatting helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _format_comment(result: TriageResult) -> str:
-        lines = [
-            "=== AI Triage Analysis ===",
-            f"Provider: {result.provider_used}  |  Confidence: {result.confidence:.0%}",
-            "",
-            f"Priority: {result.priority}",
-            f"Category: {result.category} / {result.subcategory}",
-        ]
-        if result.suggested_team:
-            lines.append(f"Suggested Team: {result.suggested_team}")
-        if result.suggested_assignee:
-            lines.append(f"Suggested Assignee: {result.suggested_assignee}")
-        if result.estimated_resolution:
-            lines.append(f"Est. Resolution: {result.estimated_resolution}")
-        lines += ["", f"Summary: {result.summary}", ""]
-        if result.suggested_actions:
-            lines.append("Suggested Actions:")
-            for i, action in enumerate(result.suggested_actions, 1):
-                lines.append(f"  {i}. {action}")
-        if result.escalate:
-            lines += ["", f"*** ESCALATION RECOMMENDED: {result.escalation_reason} ***"]
-        lines.append("")
-        lines.append("(This comment was generated automatically by the AI Triage Tool)")
-        return "\n".join(lines)
