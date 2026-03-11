@@ -29,6 +29,7 @@ import os
 import signal
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -80,6 +81,23 @@ _ALL_PROVIDER_NAMES = [
     "Microsoft Copilot",
     "Atlassian Rovo",
 ]
+
+
+# ---------------------------------------------------------------------------
+# One-off spinner context manager (used by several commands below)
+# ---------------------------------------------------------------------------
+
+@contextmanager
+def _spinner(description: str):
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("{task.description}"),
+        transient=True,
+        console=console,
+    ) as prog:
+        t = prog.add_task(description, total=None)
+        yield
+        prog.update(t, completed=True)
 
 
 # ---------------------------------------------------------------------------
@@ -449,11 +467,13 @@ def cmd_watch(args, engine: TriageEngine, jsm: Optional[JSMClient]):
                             console.print(f"  [red]✗[/red] {ticket.key}: {exc}")
                             continue
 
-                    p_text = _priority_text(result.priority)
+                    p_style, p_label = _PRIORITY_STYLE.get(
+                        result.priority, ("bold white", f"● {result.priority}")
+                    )
                     console.print(
                         f"  [bold]{ticket.key}[/bold]  "
-                        + p_text.__str__()
-                        + f"  [dim]{result.category}[/dim]"
+                        f"[{p_style}]{p_label}[/{p_style}]  "
+                        f"[dim]{result.category}[/dim]"
                     )
             else:
                 # Overwrite same line while idle
@@ -649,25 +669,6 @@ def _chat_plain(args, engine: TriageEngine, jsm: Optional[JSMClient]):
             console.print()
         except Exception as exc:
             console.print(f"[red]✗[/red] {exc}\n")
-
-
-# ---------------------------------------------------------------------------
-# Context manager helper for one-off spinners
-# ---------------------------------------------------------------------------
-
-from contextlib import contextmanager
-
-@contextmanager
-def _spinner(description: str):
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("{task.description}"),
-        transient=True,
-        console=console,
-    ) as prog:
-        t = prog.add_task(description, total=None)
-        yield
-        prog.update(t, completed=True)
 
 
 # ---------------------------------------------------------------------------
