@@ -226,7 +226,7 @@ class AtlassianOAuth:
                     result["code"] = params["code"][0]
                     result["state"] = params.get("state", [""])[0]
 
-                body = b"<html><body><h2>Authentication complete – you may close this tab.</h2></body></html>"
+                body = b"<html><body><h2>Authentication complete - you may close this tab.</h2></body></html>"
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html")
                 self.send_header("Content-Length", str(len(body)))
