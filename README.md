@@ -1,84 +1,88 @@
-# Security Incident Triage Assistant CLI
+# chat-cli
 
-A clean, persistent command-line chat assistant for Azure OpenAI, focused on security incident triage.
+A collection of AI-powered command-line tools for helpdesk and chat workflows.
 
-## Highlights
+---
 
-- **Structured**: launcher checks and chat runtime are separated.
-- **Easy setup**: preflight checks for Python, dependencies, and `.env` values.
-- **Secure defaults**: Entra ID auth + private local session file permissions.
-- **Reliable UX**: graceful shutdown, session restore, and configurable run timeouts.
+## Tools
 
-## Requirements
+### jsm_triage — AI Helpdesk Ticket Triage
 
-- Python **3.9+**
-- Azure OpenAI resource + deployment name
-- Entra ID authentication available locally (`az login`, service principal, or managed identity)
+An enterprise-grade CLI that uses multiple AI backends to automatically triage
+Atlassian Jira Service Management (JSM) helpdesk tickets across IT, HR,
+Facilities, Finance, and any other service desk.
 
-Install dependencies:
+See **[jsm_triage/README.md](jsm_triage/README.md)** for full documentation.
+
+**Quick start:**
+
+```bash
+cd jsm_triage
+pip install -r requirements.txt
+cp .env.example .env
+
+python -m jsm_triage auth atlassian   # OAuth login
+python -m jsm_triage status           # verify connections
+python -m jsm_triage triage IT-42     # triage a ticket
+python -m jsm_triage chat             # interactive assistant
+```
+
+Supported AI providers: Azure OpenAI · GitHub Copilot · OpenAI/ChatGPT · Microsoft Copilot · Atlassian Rovo
+
+---
+
+### assistant.py — Azure OpenAI Chat Assistant
+
+A lightweight persistent chat assistant backed by Azure OpenAI Assistants API.
+Useful as a standalone conversational CLI or as a reference for Azure OpenAI
+Entra ID authentication patterns.
+
+**Quick start:**
 
 ```bash
 pip install -r requirements.txt
+cp .env.example .env    # set ENDPOINT_URL and DEPLOYMENT_NAME
+python run_assistant.py
 ```
 
-## Configuration
-
-Copy and edit environment file:
-
-```bash
-cp .env.example .env
-```
-
-Required values:
+#### Configuration
 
 ```env
 ENDPOINT_URL=https://your-resource.openai.azure.com/
 DEPLOYMENT_NAME=your_model_deployment_name
+ASSISTANT_RUN_TIMEOUT_SECONDS=180   # optional
 ```
 
-Optional value:
-
-```env
-ASSISTANT_RUN_TIMEOUT_SECONDS=180
-```
-
-## Run
-
-Recommended (includes preflight checks):
-
-```bash
-python run_assistant.py
-```
-
-Direct runtime:
-
-```bash
-python assistant.py
-```
-
-## Interactive commands
+#### Interactive commands
 
 | Command | Description |
-|---|---|
-| `help` | Show command help and examples |
+|---------|-------------|
+| `help` | Show command help |
 | `new` | Start a new conversation thread |
 | `status` | Show current config/session metadata |
 | `quit` / `exit` | Save session and close |
 
-## Security notes
+#### Notes
 
-- Session metadata is written to `~/.security_assistant_session.json`.
-- Session writes are **atomic** and permissions are restricted to user read/write (`0600`).
-- Required env vars are validated before startup.
-- Assistant run polling uses a timeout to avoid hanging forever.
+- Requires Python 3.9+ and an Azure OpenAI resource with Entra ID auth (`az login`, service principal, or managed identity)
+- Session metadata stored at `~/.security_assistant_session.json` with `0600` permissions
+
+---
 
 ## Project structure
 
 ```text
 chat-cli/
-├── assistant.py        # Main interactive runtime
-├── run_assistant.py    # Preflight checks + launcher
-├── requirements.txt    # Runtime dependencies
-├── .env.example        # Environment template
-└── README.md           # Documentation
+├── jsm_triage/             # Multi-provider JSM helpdesk triage CLI
+│   ├── auth/               #   OAuth 2.0 3LO (Atlassian, Azure, GitHub)
+│   ├── jsm/                #   Atlassian REST API client + data models
+│   ├── providers/          #   AI provider backends
+│   ├── cli.py              #   Entry point (rich TUI)
+│   ├── triage_engine.py    #   Provider orchestration + prompt building
+│   ├── requirements.txt
+│   └── README.md
+├── assistant.py            # Azure OpenAI chat assistant runtime
+├── run_assistant.py        # Preflight checks + launcher
+├── requirements.txt        # assistant.py dependencies
+└── .env.example            # Environment template
 ```
