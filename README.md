@@ -18,13 +18,13 @@ See **[jsm_triage/README.md](jsm_triage/README.md)** for full documentation.
 
 ```bash
 cd jsm_triage
-pip install -r requirements.txt
+pip install -e .            # installs the jsm-triage command
 cp .env.example .env
 
-python -m jsm_triage auth atlassian   # OAuth login
-python -m jsm_triage status           # verify connections
-python -m jsm_triage triage IT-42     # triage a ticket
-python -m jsm_triage chat             # interactive assistant
+jsm-triage auth atlassian   # OAuth login
+jsm-triage status           # verify connections
+jsm-triage triage IT-42     # triage a ticket
+jsm-triage chat             # interactive assistant
 ```
 
 Supported AI providers: Azure OpenAI · GitHub Copilot · OpenAI/ChatGPT · Microsoft Copilot · Atlassian Rovo

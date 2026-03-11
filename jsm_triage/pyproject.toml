@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "jsm-triage"
+version = "1.0.0"
+description = "AI-powered helpdesk ticket triage CLI for Atlassian JSM"
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+    "openai>=1.30.0",
+    "azure-identity>=1.16.0",
+    "azure-ai-inference>=1.0.0b4",
+    "msal>=1.28.0",
+    "rich>=13.7.0",
+    "prompt_toolkit>=3.0.43",
+]
+
+[project.scripts]
+jsm-triage = "jsm_triage.cli:main"
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["jsm_triage*"]

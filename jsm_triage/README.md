@@ -19,32 +19,34 @@ Atlassian Jira Service Management (JSM) helpdesk tickets.
 
 ```bash
 cd jsm_triage
-pip install -r requirements.txt
+pip install -e .            # installs the jsm-triage command
 cp .env.example .env        # fill in your credentials
 
 # Authenticate (OAuth 2.0 – recommended)
-python -m jsm_triage auth atlassian   # opens browser
-python -m jsm_triage auth github      # device flow
-python -m jsm_triage auth azure       # MSAL device flow
+jsm-triage auth atlassian   # opens browser
+jsm-triage auth github      # device flow
+jsm-triage auth azure       # MSAL device flow
 
 # Check everything is connected
-python -m jsm_triage status
+jsm-triage status
 
 # Triage a single ticket
-python -m jsm_triage triage IT-42
+jsm-triage triage IT-42
 
 # Triage all open, un-triaged tickets
-python -m jsm_triage triage \
+jsm-triage triage \
   --jql "project=IT AND status=Open AND labels!=ai-triaged" \
   --limit 50
 
 # Watch a queue in real-time
-python -m jsm_triage watch --service-desk 1 --queue 3 --interval 30
+jsm-triage watch --service-desk 1 --queue 3 --interval 30
 
 # Interactive chat
-python -m jsm_triage chat
-python -m jsm_triage chat --ticket IT-42
+jsm-triage chat
+jsm-triage chat --ticket IT-42
 ```
+
+> **Without installing:** `python -m jsm_triage <command>` works identically.
 
 ---
 
@@ -60,7 +62,7 @@ python -m jsm_triage chat --ticket IT-42
    - `read:servicedesk-request` `write:servicedesk-request`
    - `offline_access` (enables refresh tokens)
 4. Copy **Client ID** and **Secret** into `.env`
-5. Run `python -m jsm_triage auth atlassian` – browser opens, tokens stored in `~/.jsm_triage/tokens.json`
+5. Run `jsm-triage auth atlassian` – browser opens, tokens stored in `~/.jsm_triage/tokens.json`
 
 ### Atlassian JSM – Basic auth (simpler)
 
@@ -73,7 +75,7 @@ Generate an API token at <https://id.atlassian.com/manage-profile/security/api-t
 
 1. Create an OAuth App at <https://github.com/settings/developers> – enable **Device Flow**
 2. Set `GITHUB_CLIENT_ID` in `.env`
-3. Run `python -m jsm_triage auth github`
+3. Run `jsm-triage auth github`
 
 **Personal Access Token:**  Set `GITHUB_TOKEN` in `.env` or export it as an environment variable.
 
@@ -111,7 +113,7 @@ azure_openai → github_copilot → openai → ms_copilot → rovo
 Override at runtime:
 
 ```bash
-python -m jsm_triage --provider github_copilot,openai triage IT-42
+jsm-triage --provider github_copilot,openai triage IT-42
 ```
 
 Or persistently via `.env`:
@@ -168,7 +170,7 @@ Results are posted as a comment on the ticket and the `ai-triaged` label is adde
 ### CLI flags
 
 ```
-python -m jsm_triage [--provider NAME] [--dry-run] [--verbose] <command>
+jsm-triage [--provider NAME] [--dry-run] [--verbose] <command>
 
 Commands:
   auth     atlassian | azure | github | logout | status
@@ -245,4 +247,4 @@ OAuth tokens are stored in `~/.jsm_triage/tokens.json` with `0600` permissions
 (owner-read-write only).  Refresh tokens are used automatically to keep sessions
 alive without re-authenticating.
 
-Run `python -m jsm_triage auth logout` to clear all stored tokens.
+Run `jsm-triage auth logout` to clear all stored tokens.
