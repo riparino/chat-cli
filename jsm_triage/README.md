@@ -129,16 +129,35 @@ For each ticket the AI produces:
 | Field | Description |
 |-------|-------------|
 | `priority` | Critical / High / Medium / Low |
-| `category` | Top-level category (e.g. *Access & Permissions*) |
-| `subcategory` | Specific sub-category (e.g. *Password Reset*) |
-| `suggested_team` | Routing recommendation (e.g. *IT Support L1*) |
+| `category` | Top-level category (see examples below) |
+| `subcategory` | Specific sub-category |
+| `suggested_team` | Routing recommendation (e.g. *IT Support L1*, *HR Ops*, *Facilities*) |
 | `suggested_assignee` | Individual assignee if deterministic |
 | `summary` | 1-2 sentence triage summary |
 | `suggested_actions` | Step-by-step resolution guide |
 | `escalate` | Boolean flag for immediate escalation |
 | `escalation_reason` | Why escalation is recommended |
-| `estimated_resolution` | SLA estimate (e.g. *4 hours*) |
+| `estimated_resolution` | SLA estimate (e.g. *4 hours*, *1-2 business days*) |
 | `confidence` | 0–100% confidence score |
+
+### Category examples
+
+The AI adapts categories to your organisation context.  Out-of-the-box examples:
+
+| Category | Example subcategories |
+|----------|-----------------------|
+| Access & Permissions | Password Reset, Account Lockout, VPN Access, Role Change |
+| Hardware | Laptop Issue, Printer, Peripheral, Equipment Request |
+| Software / Applications | Installation, Licence, Bug / Crash, Upgrade |
+| Network & Connectivity | Wi-Fi, VPN, DNS, Proxy |
+| Email & Collaboration | Mailbox Full, Calendar Sync, Teams / Slack, Shared Mailbox |
+| Security Incident | Phishing, Data Loss, Malware, Suspicious Activity |
+| Data & Storage | File Recovery, Backup, Cloud Storage, Permissions |
+| Onboarding / Offboarding | New Starter Setup, Leaver Process, Equipment Return |
+| HR Systems | Payroll Query, Leave Request, HRIS Access |
+| Finance Systems | Expense Tool, Procurement, ERP Access |
+| Facilities | Building Access, Desk Booking, AV / Meeting Room |
+| General Enquiry | Policy Question, How-To, Information Request |
 
 Results are posted as a comment on the ticket and the `ai-triaged` label is added.
 
@@ -193,9 +212,29 @@ Inject free-text context about your org into every triage prompt to improve
 team routing and priority decisions:
 
 ```env
-TRIAGE_ORG_CONTEXT=We are a 1000-person finance company. IT has L1 (helpdesk), \
-L2 (infrastructure), L3 (security). VIP = CFO, CTO, board members. \
-Core systems: Workday, Salesforce, Bloomberg Terminal.
+# Generic example
+TRIAGE_ORG_CONTEXT=We are a 500-person company with three helpdesk tiers: \
+L1 (first-line support), L2 (systems & infrastructure), L3 (specialist/vendor). \
+VIP users include the executive team and board members. \
+Core systems: Microsoft 365, Okta, Zoom, Jira, Confluence.
+```
+
+Tailor it to your environment — the more detail you provide, the better the
+routing and priority decisions:
+
+```env
+# Finance sector example
+TRIAGE_ORG_CONTEXT=We are a 1000-person financial services firm. \
+IT support tiers: L1 Helpdesk, L2 Infrastructure, L3 Security/Compliance. \
+Regulated systems include Bloomberg Terminal, Salesforce, and Workday. \
+VIPs: CFO, CTO, and board members always receive Critical or High priority.
+```
+
+```env
+# Higher education example
+TRIAGE_ORG_CONTEXT=University IT helpdesk supporting 20,000 students and 3,000 staff. \
+Teams: Desktop Support, Network, Research Computing, AV & Teaching Tech, Identity. \
+Student tickets are Medium unless exam-related; staff tickets follow standard SLA.
 ```
 
 ---

@@ -248,8 +248,9 @@ class TriageEngine:
             )
         else:
             system_content = (
-                "You are a helpful IT helpdesk assistant with expertise in "
-                "Atlassian JSM, ITSM best practices, and enterprise IT support."
+                "You are a helpful helpdesk assistant with expertise in "
+                "Atlassian JSM, ITSM best practices, and enterprise service management "
+                "across IT, HR, Facilities, and Finance support functions."
             )
 
         full_messages = [{"role": "system", "content": system_content}] + messages
