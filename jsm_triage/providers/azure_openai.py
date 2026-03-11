@@ -31,16 +31,16 @@ class AzureOpenAIProvider(OpenAICompatibleProvider):
         return "Azure OpenAI"
 
     def is_available(self) -> bool:
-        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("ENDPOINT_URL")
-        deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT") or os.getenv("DEPLOYMENT_NAME")
-        return bool(endpoint and deployment)
+        return bool(
+            os.getenv("AZURE_OPENAI_ENDPOINT") and os.getenv("AZURE_OPENAI_DEPLOYMENT")
+        )
 
     def _build_client(self) -> None:
         try:
             from openai import AzureOpenAI
 
-            endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("ENDPOINT_URL")
-            deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT") or os.getenv("DEPLOYMENT_NAME")
+            endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+            deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
             api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-05-01-preview")
             api_key = os.getenv("AZURE_OPENAI_API_KEY")
 
