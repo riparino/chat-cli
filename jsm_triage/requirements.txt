@@ -1,0 +1,18 @@
+# Core HTTP
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# OpenAI-compatible providers (Azure OpenAI, GitHub Copilot, ChatGPT)
+openai>=1.30.0
+
+# Azure identity (Entra ID / DefaultAzureCredential for Azure OpenAI)
+azure-identity>=1.16.0
+
+# Microsoft Copilot / Azure AI Inference
+azure-ai-inference>=1.0.0b4
+
+# Azure MSAL for device-code OAuth flow (Azure provider 3LO)
+msal>=1.28.0
+
+# Atlassian JSM (no extra SDK needed – pure REST via requests)
+# GitHub Models (uses openai SDK with custom base_url)

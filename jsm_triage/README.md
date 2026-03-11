@@ -1,0 +1,209 @@
+# JSM AI Triage Tool
+
+An enterprise-grade CLI that uses multiple AI backends to automatically triage
+Atlassian Jira Service Management (JSM) helpdesk tickets.
+
+## Features
+
+- **Multi-provider AI**: Azure OpenAI · GitHub Copilot · OpenAI/ChatGPT · Microsoft Copilot · Atlassian Rovo
+- **Automatic failover**: if the primary provider is unavailable, the next one in the chain is used
+- **OAuth 2.0 (3LO)**: browser-based login for Atlassian (auth code + PKCE), Azure (MSAL device flow), GitHub (device flow) – no hard-coded secrets
+- **Full JSM integration**: read tickets, post triage comments, update priority, add labels, transition workflow
+- **Four run modes**: triage · watch (queue poller) · chat · status
+- **Batch & JQL support**: triage whole queues or arbitrary JQL result sets
+- **Dry-run mode**: analyse tickets without writing anything back to JSM
+
+---
+
+## Quick Start
+
+```bash
+cd jsm_triage
+pip install -r requirements.txt
+cp .env.example .env        # fill in your credentials
+
+# Authenticate (OAuth 2.0 – recommended)
+python -m jsm_triage auth atlassian   # opens browser
+python -m jsm_triage auth github      # device flow
+python -m jsm_triage auth azure       # MSAL device flow
+
+# Check everything is connected
+python -m jsm_triage status
+
+# Triage a single ticket
+python -m jsm_triage triage IT-42
+
+# Triage all open, un-triaged tickets
+python -m jsm_triage triage \
+  --jql "project=IT AND status=Open AND labels!=ai-triaged" \
+  --limit 50
+
+# Watch a queue in real-time
+python -m jsm_triage watch --service-desk 1 --queue 3 --interval 30
+
+# Interactive chat
+python -m jsm_triage chat
+python -m jsm_triage chat --ticket IT-42
+```
+
+---
+
+## Authentication
+
+### Atlassian JSM – OAuth 2.0 (recommended)
+
+1. Go to <https://developer.atlassian.com/console/myapps/> → **Create app → OAuth 2.0**
+2. Add callback URL: `http://localhost:8765/callback`
+3. Add scopes:
+   - `read:jira-work` `write:jira-work`
+   - `read:jira-user`
+   - `read:servicedesk-request` `write:servicedesk-request`
+   - `offline_access` (enables refresh tokens)
+4. Copy **Client ID** and **Secret** into `.env`
+5. Run `python -m jsm_triage auth atlassian` – browser opens, tokens stored in `~/.jsm_triage/tokens.json`
+
+### Atlassian JSM – Basic auth (simpler)
+
+Set `ATLASSIAN_EMAIL` and `ATLASSIAN_API_TOKEN` in `.env`.
+Generate an API token at <https://id.atlassian.com/manage-profile/security/api-tokens>.
+
+### GitHub Copilot
+
+**Device flow (3LO):**
+
+1. Create an OAuth App at <https://github.com/settings/developers> – enable **Device Flow**
+2. Set `GITHUB_CLIENT_ID` in `.env`
+3. Run `python -m jsm_triage auth github`
+
+**Personal Access Token:**  Set `GITHUB_TOKEN` in `.env` or export it as an environment variable.
+
+The tool uses GitHub Models (`https://models.inference.ai.azure.com`) which is
+OpenAI-API-compatible and provides access to GPT-4o and many other models via
+your GitHub Copilot subscription.
+
+### Azure OpenAI
+
+| Method | Configuration |
+|--------|--------------|
+| API key | Set `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_KEY` |
+| Entra ID (az login) | Set endpoint + deployment; omit API key |
+| MSAL device flow | Set `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`; run `jsm-triage auth azure` |
+
+### Microsoft Copilot (Azure AI Inference)
+
+Set `MS_COPILOT_ENDPOINT` (your Azure AI Foundry endpoint).
+Auth follows the same pattern as Azure OpenAI.
+
+### OpenAI / ChatGPT
+
+Set `OPENAI_API_KEY`.  Optionally set `OPENAI_MODEL` (default `gpt-4o`).
+
+---
+
+## Provider Fallback Chain
+
+By default providers are tried in this order:
+
+```
+azure_openai → github_copilot → openai → ms_copilot → rovo
+```
+
+Override at runtime:
+
+```bash
+python -m jsm_triage --provider github_copilot,openai triage IT-42
+```
+
+Or persistently via `.env`:
+
+```
+TRIAGE_PROVIDER_ORDER=github_copilot,azure_openai,openai
+```
+
+---
+
+## Triage Output
+
+For each ticket the AI produces:
+
+| Field | Description |
+|-------|-------------|
+| `priority` | Critical / High / Medium / Low |
+| `category` | Top-level category (e.g. *Access & Permissions*) |
+| `subcategory` | Specific sub-category (e.g. *Password Reset*) |
+| `suggested_team` | Routing recommendation (e.g. *IT Support L1*) |
+| `suggested_assignee` | Individual assignee if deterministic |
+| `summary` | 1-2 sentence triage summary |
+| `suggested_actions` | Step-by-step resolution guide |
+| `escalate` | Boolean flag for immediate escalation |
+| `escalation_reason` | Why escalation is recommended |
+| `estimated_resolution` | SLA estimate (e.g. *4 hours*) |
+| `confidence` | 0–100% confidence score |
+
+Results are posted as a comment on the ticket and the `ai-triaged` label is added.
+
+---
+
+## Reference
+
+### CLI flags
+
+```
+python -m jsm_triage [--provider NAME] [--dry-run] [--verbose] <command>
+
+Commands:
+  auth     atlassian | azure | github | logout | status
+  triage   [TICKET…] [--jql JQL] [--queue ID --service-desk ID]
+           [--limit N] [--no-comment] [--no-label] [--update-priority]
+           [--output-json FILE]
+  watch    --service-desk ID --queue ID [--interval SEC] [--limit N]
+  chat     [--ticket KEY]
+  status
+```
+
+### File structure
+
+```
+jsm_triage/
+├── auth/
+│   ├── atlassian_oauth.py   OAuth 2.0 auth-code + PKCE (3LO)
+│   ├── azure_oauth.py       MSAL device flow
+│   ├── github_oauth.py      GitHub device flow
+│   └── token_store.py       Secure local token cache
+├── jsm/
+│   ├── client.py            Atlassian REST API client
+│   └── models.py            Ticket / ServiceDesk / Queue data models
+├── providers/
+│   ├── azure_openai.py
+│   ├── github_copilot.py
+│   ├── ms_copilot.py
+│   ├── openai_direct.py
+│   └── rovo.py
+├── cli.py                   Entry point (argparse)
+├── triage_engine.py         Provider orchestration + prompt building
+├── requirements.txt
+└── .env.example
+```
+
+---
+
+## Organisation Context
+
+Inject free-text context about your org into every triage prompt to improve
+team routing and priority decisions:
+
+```env
+TRIAGE_ORG_CONTEXT=We are a 1000-person finance company. IT has L1 (helpdesk), \
+L2 (infrastructure), L3 (security). VIP = CFO, CTO, board members. \
+Core systems: Workday, Salesforce, Bloomberg Terminal.
+```
+
+---
+
+## Token Storage
+
+OAuth tokens are stored in `~/.jsm_triage/tokens.json` with `0600` permissions
+(owner-read-write only).  Refresh tokens are used automatically to keep sessions
+alive without re-authenticating.
+
+Run `python -m jsm_triage auth logout` to clear all stored tokens.
