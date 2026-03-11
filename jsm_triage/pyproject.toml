@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jsm-triage"
-version = "1.0.0"
-description = "AI-powered helpdesk ticket triage CLI for Atlassian JSM"
-requires-python = ">=3.9"
+version = "2.0.0"
+description = "AI-powered IAM/access management ticket triage CLI for Atlassian JSM"
+requires-python = ">=3.10"
 dependencies = [
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
@@ -16,11 +16,25 @@ dependencies = [
     "msal>=1.28.0",
     "rich>=13.7.0",
     "prompt_toolkit>=3.0.43",
+    "pyyaml>=6.0",
+    "urllib3>=2.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-mock>=3.0",
 ]
 
 [project.scripts]
 jsm-triage = "jsm_triage.cli:main"
 
 [tool.setuptools.packages.find]
-where = [".."]
-include = ["jsm_triage*"]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"jsm_triage" = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

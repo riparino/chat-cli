@@ -3,28 +3,35 @@
 JSM AI Triage Tool – CLI entry point.
 
 Modes:
-  auth    – OAuth 2.0 login for Atlassian / Azure / GitHub
-  triage  – triage one or more tickets (interactive or batch)
-  watch   – continuously watch a queue and triage new tickets
-  chat    – free-form chat with the AI (optionally anchored to a ticket)
-  status  – show configured providers and JSM connection info
+  auth            – OAuth 2.0 login for Atlassian / Azure / GitHub
+  triage          – triage one or more tickets (by key, JQL, or queue)
+  watch           – continuously watch a queue and triage new tickets
+  chat            – free-form chat with the AI (optionally anchored to a ticket)
+  explain         – show detailed triage reasoning for a ticket
+  feedback        – record a human outcome for a triaged ticket
+  validate-config – validate local policy/config files
+  knowledge-test  – test Confluence/Rovo knowledge retrieval
+  export-examples – export approved feedback as triage examples
+  review-rules    – show staged rule candidates for admin review
+  status          – show configured providers and JSM connection info
 
 Usage examples:
-  python -m jsm_triage auth atlassian
-  python -m jsm_triage auth github
-  python -m jsm_triage auth azure
-  python -m jsm_triage auth status
-  python -m jsm_triage triage IT-42
-  python -m jsm_triage triage --queue 1 --service-desk 2 --limit 20
-  python -m jsm_triage triage --jql "project=IT AND status=Open AND labels!=ai-triaged"
-  python -m jsm_triage watch  --queue 1 --service-desk 2 --interval 60
-  python -m jsm_triage chat
-  python -m jsm_triage chat --ticket IT-42
-  python -m jsm_triage status
+  jsm-triage auth atlassian
+  jsm-triage triage IT-42
+  jsm-triage triage --jql "project=IT AND status=Open AND labels!=ai-triaged"
+  jsm-triage watch --queue 1 --service-desk 2 --interval 60
+  jsm-triage explain IT-42
+  jsm-triage feedback IT-42
+  jsm-triage validate-config
+  jsm-triage knowledge-test --query "urgent termination access removal"
+  jsm-triage export-examples
+  jsm-triage review-rules
+  jsm-triage status
 """
 
 import argparse
 import json
+import logging
 import os
 import signal
 import sys
@@ -35,7 +42,6 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-# Load .env from the project root or a jsm_triage/.env
 _here = Path(__file__).parent
 load_dotenv(_here / ".env")
 load_dotenv(_here.parent / ".env")
@@ -44,16 +50,18 @@ load_dotenv(_here.parent / ".env")
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 from rich import box
 
+from .audit import AuditLog, configure_logging
+from .feedback.store import FeedbackStore, OUTCOME_ACCEPTED, OUTCOME_CORRECTED, OUTCOME_REJECTED
 from .triage_engine import TriageEngine, build_provider_chain
 from .jsm.client import JSMClient
 from .jsm.models import Ticket
-from .providers.base import TriageResult
+from .providers.base import IAMTriageResult
 from .auth import AtlassianOAuth, AzureOAuth, GitHubOAuth, PROVIDER_LABELS
 from .auth.token_store import TokenStore
 
@@ -62,16 +70,22 @@ from .auth.token_store import TokenStore
 # ---------------------------------------------------------------------------
 
 console = Console()
-
-# Shared token store for the whole process
 _token_store = TokenStore()
 
-# Priority display config
 _PRIORITY_STYLE = {
     "Critical": ("bold white on dark_red",   "● Critical"),
     "High":     ("bold red",                  "● High"),
     "Medium":   ("bold yellow",               "● Medium"),
     "Low":      ("bold green",                "● Low"),
+}
+
+_NEXT_STEP_STYLE = {
+    "Return for Info":  ("yellow",          "↩ Return for Info"),
+    "Fulfill":          ("bold green",      "✓ Fulfill"),
+    "Route to Team":    ("cyan",            "→ Route to Team"),
+    "Escalate":         ("bold red",        "⚡ Escalate"),
+    "Reject":           ("bold red",        "✗ Reject"),
+    "Pending Approval": ("bold yellow",     "⏸ Pending Approval"),
 }
 
 _ALL_PROVIDER_NAMES = [
@@ -84,7 +98,7 @@ _ALL_PROVIDER_NAMES = [
 
 
 # ---------------------------------------------------------------------------
-# One-off spinner context manager (used by several commands below)
+# Context manager helpers
 # ---------------------------------------------------------------------------
 
 @contextmanager
@@ -108,7 +122,7 @@ def _banner():
     console.print(
         Panel(
             "[bold cyan]JSM AI Triage Tool[/bold cyan]  ·  "
-            "[dim]Atlassian JSM + Multi-Provider AI[/dim]",
+            "[dim]IAM/Access Management Edition[/dim]",
             box=box.DOUBLE_EDGE,
             padding=(0, 4),
             style="bold",
@@ -121,9 +135,13 @@ def _priority_text(priority: str) -> Text:
     return Text(label, style=style)
 
 
-def _render_result(ticket: Ticket, result: TriageResult, verbose: bool = False):
+def _next_step_text(next_step: str) -> Text:
+    style, label = _NEXT_STEP_STYLE.get(next_step, ("white", next_step))
+    return Text(label, style=style)
+
+
+def _render_result(ticket: Ticket, result: IAMTriageResult, verbose: bool = False):
     """Render a triage result as a rich Panel."""
-    p_style, _ = _PRIORITY_STYLE.get(result.priority, ("bold white", ""))
     border_color = {
         "Critical": "dark_red",
         "High":     "red",
@@ -131,23 +149,40 @@ def _render_result(ticket: Ticket, result: TriageResult, verbose: bool = False):
         "Low":      "green",
     }.get(result.priority, "cyan")
 
-    # Build the content table
     grid = Table.grid(padding=(0, 2))
-    grid.add_column(style="dim", min_width=14)
+    grid.add_column(style="dim", min_width=20)
     grid.add_column()
 
     grid.add_row("Provider", f"{result.provider_used}  [dim]({result.confidence:.0%} confidence)[/dim]")
     grid.add_row("Priority", _priority_text(result.priority))
+    grid.add_row(
+        "Urgency / Impact",
+        f"{result.urgency} / {result.business_impact}"
+    )
     grid.add_row("Category", f"{result.category}[dim] / {result.subcategory}[/dim]")
-    if result.suggested_team:
-        grid.add_row("Team", result.suggested_team)
-    if result.suggested_assignee:
-        grid.add_row("Assignee", result.suggested_assignee)
-    if result.estimated_resolution:
-        grid.add_row("Est. SLA", result.estimated_resolution)
+    grid.add_row("Request Type", result.request_type or "[dim]—[/dim]")
+    if result.likely_fulfilling_team:
+        grid.add_row("Suggested Team", result.likely_fulfilling_team)
+    if result.likely_assignment_group:
+        grid.add_row("Assignment Group", result.likely_assignment_group)
 
     grid.add_row("", "")
-    grid.add_row("Summary", Text(result.summary, overflow="fold"))
+    grid.add_row("Next Step", _next_step_text(result.recommended_next_step))
+
+    if result.requires_approval:
+        grid.add_row(
+            "Approval Required",
+            Text(f"⚠ {result.approval_type or 'Yes'}", style="bold yellow"),
+        )
+
+    if result.required_information_missing and result.missing_fields:
+        missing_text = Text()
+        for f in result.missing_fields:
+            missing_text.append(f"  • {f}\n", style="yellow")
+        grid.add_row("Missing Info", missing_text)
+
+    grid.add_row("", "")
+    grid.add_row("Rationale", Text(result.rationale or "—", overflow="fold"))
 
     if result.suggested_actions:
         actions_text = Text()
@@ -155,7 +190,7 @@ def _render_result(ticket: Ticket, result: TriageResult, verbose: bool = False):
             actions_text.append(f"  {i}. {action}\n")
         grid.add_row("Actions", actions_text)
 
-    if result.escalate:
+    if result.escalation_required:
         grid.add_row(
             "",
             Text(
@@ -164,7 +199,16 @@ def _render_result(ticket: Ticket, result: TriageResult, verbose: bool = False):
             ),
         )
 
-    title = f"[bold]{ticket.key}[/bold]  [dim]·[/dim]  {ticket.summary[:60]}"
+    if result.policy_references:
+        grid.add_row("Policy Refs", "\n".join(f"  • {r}" for r in result.policy_references))
+
+    if result.knowledge_sources_used:
+        grid.add_row(
+            "Knowledge Used",
+            "[dim]" + ", ".join(result.knowledge_sources_used[:3]) + "[/dim]",
+        )
+
+    title = f"[bold]{ticket.key}[/bold]  [dim]·[/dim]  {ticket.summary[:70]}"
     console.print(
         Panel(grid, title=title, border_style=border_color, padding=(1, 2))
     )
@@ -213,7 +257,6 @@ def cmd_auth(args, *_):
         if not oauth.is_configured():
             console.print("[red]✗[/red] Set [bold]ATLASSIAN_CLIENT_ID[/bold] and "
                           "[bold]ATLASSIAN_CLIENT_SECRET[/bold] in .env first.")
-            console.print("  [dim]https://developer.atlassian.com/console/myapps/[/dim]")
             sys.exit(1)
         oauth.login()
 
@@ -229,7 +272,6 @@ def cmd_auth(args, *_):
         oauth = GitHubOAuth(_token_store)
         if not oauth.is_configured():
             console.print("[red]✗[/red] Set [bold]GITHUB_CLIENT_ID[/bold] in .env first.")
-            console.print("  [dim]https://github.com/settings/developers[/dim]")
             sys.exit(1)
         oauth.login()
 
@@ -273,6 +315,24 @@ def cmd_status(args, engine: TriageEngine, jsm: Optional[JSMClient]):
 
     # OAuth table
     console.print(Panel(_oauth_status_table(), title="OAuth Sessions", padding=(0, 1)))
+
+    # Config / grounding status
+    config_loader = engine._policy_loader
+    policy = config_loader.load()
+    config_table = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
+    config_table.add_column(min_width=22)
+    config_table.add_column()
+    config_table.add_row("Config dir", str(config_loader.config_dir()))
+    config_table.add_row("Routing rules", str(len(policy.routing_rules)))
+    config_table.add_row("Approval rules", str(len(policy.approval_rules)))
+    config_table.add_row("Triage examples", str(len(policy.examples)))
+    gs = config_loader.load_grounding_sources()
+    config_table.add_row(
+        "Confluence grounding",
+        "[green]configured[/green]" if (gs.spaces or gs.page_ids or gs.cql_queries)
+        else "[dim]not configured[/dim]",
+    )
+    console.print(Panel(config_table, title="Local Config / Grounding", padding=(0, 1)))
 
     # JSM connection
     jsm_table = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
@@ -371,7 +431,7 @@ def cmd_triage(args, engine: TriageEngine, jsm: Optional[JSMClient]):
         return
 
     console.print(f"\n[bold]Triaging {len(tickets)} ticket(s)…[/bold]\n")
-    results: list[tuple[Ticket, TriageResult]] = []
+    results: list[tuple[Ticket, IAMTriageResult]] = []
 
     for ticket in tickets:
         with Progress(
@@ -473,13 +533,17 @@ def cmd_watch(args, engine: TriageEngine, jsm: Optional[JSMClient]):
                     p_style, p_label = _PRIORITY_STYLE.get(
                         result.priority, ("bold white", f"● {result.priority}")
                     )
+                    ns_style, ns_label = _NEXT_STEP_STYLE.get(
+                        result.recommended_next_step,
+                        ("white", result.recommended_next_step),
+                    )
                     console.print(
                         f"  [bold]{ticket.key}[/bold]  "
                         f"[{p_style}]{p_label}[/{p_style}]  "
+                        f"[{ns_style}]{ns_label}[/{ns_style}]  "
                         f"[dim]{result.category}[/dim]"
                     )
             else:
-                # Overwrite same line while idle
                 console.print(
                     f"[dim]{time.strftime('%H:%M:%S')}  no new tickets[/dim]",
                     end="\r",
@@ -489,6 +553,347 @@ def cmd_watch(args, engine: TriageEngine, jsm: Optional[JSMClient]):
             console.print(f"[yellow]⚠[/yellow] Error polling queue: {exc}")
 
         time.sleep(args.interval)
+
+
+def cmd_explain(args, engine: TriageEngine, jsm: Optional[JSMClient]):
+    """Show detailed triage reasoning for a previously triaged ticket."""
+    _banner()
+
+    if not jsm:
+        console.print("[red]✗[/red] JSM credentials required to fetch ticket.")
+        sys.exit(1)
+
+    key = args.ticket_key
+    with _spinner(f"Fetching [bold]{key}[/bold]…"):
+        try:
+            ticket = jsm.get_ticket(key)
+        except Exception as exc:
+            console.print(f"[red]✗[/red] Could not fetch {key}: {exc}")
+            sys.exit(1)
+
+    console.print(f"\n[bold]Re-triaging {key} for explanation…[/bold]\n")
+
+    with _spinner(f"Analysing [bold]{key}[/bold]…"):
+        try:
+            result = engine.triage_ticket(ticket)
+        except Exception as exc:
+            console.print(f"[red]✗[/red] Triage failed: {exc}")
+            sys.exit(1)
+
+    _render_result(ticket, result, verbose=True)
+
+    # Show full explanation panel
+    explain_grid = Table.grid(padding=(0, 2))
+    explain_grid.add_column(style="bold cyan", min_width=28)
+    explain_grid.add_column()
+
+    explain_grid.add_row("Confidence", f"{result.confidence:.0%}")
+    explain_grid.add_row("Rationale", Text(result.rationale or "—", overflow="fold"))
+
+    if result.missing_fields:
+        explain_grid.add_row(
+            "Missing Information",
+            "\n".join(f"• {f}" for f in result.missing_fields),
+        )
+
+    if result.policy_references:
+        explain_grid.add_row(
+            "Policy References",
+            "\n".join(f"• {r}" for r in result.policy_references),
+        )
+
+    if result.knowledge_sources_used:
+        explain_grid.add_row(
+            "Knowledge Sources Used",
+            "\n".join(f"• {s}" for s in result.knowledge_sources_used),
+        )
+
+    explain_grid.add_row("Provider Used", result.provider_used)
+
+    console.print(Panel(
+        explain_grid,
+        title="[bold]Triage Explanation[/bold]",
+        border_style="cyan",
+        padding=(1, 2),
+    ))
+
+    if args.output_json:
+        Path(args.output_json).write_text(
+            json.dumps(result.to_dict(), indent=2), encoding="utf-8"
+        )
+        console.print(f"\n[green]✓[/green] Explanation JSON written to [bold]{args.output_json}[/bold]")
+
+
+def cmd_feedback(args, engine: TriageEngine, jsm: Optional[JSMClient]):
+    """Record a human outcome for a triaged ticket."""
+    _banner()
+
+    store = FeedbackStore()
+    key = args.ticket_key
+
+    # Show any existing triage record for this ticket
+    existing = store.get_records_for_ticket(key)
+    if existing:
+        console.print(f"\n[dim]Found {len(existing)} existing record(s) for {key}[/dim]\n")
+    else:
+        console.print(f"\n[yellow]No existing triage record found for {key}.[/yellow]")
+        console.print("[dim]Recording feedback without a prior triage record.[/dim]\n")
+
+    # Determine outcome
+    outcome = getattr(args, "outcome", None)
+    if outcome is None:
+        console.print("Outcome options:")
+        console.print("  [green]accepted[/green]   – AI triage was correct")
+        console.print("  [yellow]corrected[/yellow]  – AI triage needed corrections")
+        console.print("  [red]rejected[/red]   – AI triage was wrong/unhelpful")
+        try:
+            outcome = console.input("\n[cyan]Outcome[/cyan]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return
+
+    if outcome not in (OUTCOME_ACCEPTED, OUTCOME_CORRECTED, OUTCOME_REJECTED):
+        console.print(f"[red]✗[/red] Invalid outcome '{outcome}'")
+        sys.exit(1)
+
+    correction = None
+    if outcome == OUTCOME_CORRECTED:
+        console.print("\n[dim]Enter corrected values (press Enter to skip a field):[/dim]")
+        correction = {}
+        for field_name in ["category", "subcategory", "priority", "recommended_next_step"]:
+            try:
+                val = console.input(f"  [cyan]{field_name}[/cyan]: ").strip()
+                if val:
+                    correction[field_name] = val
+            except (EOFError, KeyboardInterrupt):
+                break
+
+    approved_as_example = False
+    if outcome in (OUTCOME_ACCEPTED, OUTCOME_CORRECTED):
+        try:
+            ans = console.input(
+                "\nApprove as grounding example for future triage? [y/N]: "
+            ).strip().lower()
+            approved_as_example = ans in ("y", "yes")
+        except (EOFError, KeyboardInterrupt):
+            pass
+
+    example_tags: list[str] = []
+    if approved_as_example:
+        try:
+            tags_input = console.input("Tags (comma-separated, e.g. onboarding,github): ").strip()
+            if tags_input:
+                example_tags = [t.strip() for t in tags_input.split(",") if t.strip()]
+        except (EOFError, KeyboardInterrupt):
+            pass
+
+    notes = None
+    try:
+        notes = console.input("\nReviewer notes (optional, Enter to skip): ").strip() or None
+    except (EOFError, KeyboardInterrupt):
+        pass
+
+    store.record_outcome(
+        ticket_key=key,
+        outcome=outcome,
+        correction=correction,
+        reviewer_notes=notes,
+        approved_as_example=approved_as_example,
+        example_tags=example_tags,
+    )
+
+    outcome_styles = {
+        OUTCOME_ACCEPTED: "[green]accepted[/green]",
+        OUTCOME_CORRECTED: "[yellow]corrected[/yellow]",
+        OUTCOME_REJECTED: "[red]rejected[/red]",
+    }
+    console.print(
+        f"\n[green]✓[/green] Feedback recorded: {key} → {outcome_styles[outcome]}"
+    )
+    if approved_as_example:
+        console.print(
+            f"  [dim]Approved as example. Run [bold]jsm-triage export-examples[/bold] "
+            f"to export to config/.[/dim]"
+        )
+
+
+def cmd_validate_config(args, engine: TriageEngine, jsm: Optional[JSMClient]):
+    """Validate local policy/config files."""
+    _banner()
+
+    console.print("[bold]Validating configuration…[/bold]\n")
+
+    issues = engine.validate_config()
+
+    config_dir = engine._policy_loader.config_dir()
+    console.print(f"Config directory: [bold]{config_dir}[/bold]")
+
+    policy = engine._policy_loader.load()
+    gs = engine._policy_loader.load_grounding_sources()
+
+    # Summary table
+    table = Table(box=box.SIMPLE, show_header=True, padding=(0, 1))
+    table.add_column("Item", style="bold")
+    table.add_column("Status")
+    table.add_column("Count / Value")
+
+    def _check_row(name: str, count: int, warn_if_zero: bool = True):
+        if count > 0:
+            table.add_row(name, "[green]✓ loaded[/green]", str(count))
+        elif warn_if_zero:
+            table.add_row(name, "[yellow]⚠ empty[/yellow]", "0")
+        else:
+            table.add_row(name, "[dim]—[/dim]", "0")
+
+    _check_row("Routing rules", len(policy.routing_rules))
+    _check_row("Approval rules", len(policy.approval_rules))
+    _check_row("Triage examples", len(policy.examples))
+    _check_row("Confluence spaces", len(gs.spaces), warn_if_zero=False)
+    _check_row("Confluence page IDs", len(gs.page_ids), warn_if_zero=False)
+    _check_row("CQL queries", len(gs.cql_queries), warn_if_zero=False)
+    _check_row("AI providers", len(engine.providers))
+
+    console.print(table)
+
+    if issues:
+        console.print(f"\n[yellow]⚠ {len(issues)} issue(s) found:[/yellow]")
+        for issue in issues:
+            console.print(f"  [yellow]·[/yellow] {issue}")
+        sys.exit(1)
+    else:
+        console.print("\n[green]✓ Configuration is valid.[/green]")
+
+
+def cmd_knowledge_test(args, engine: TriageEngine, jsm: Optional[JSMClient]):
+    """Test knowledge retrieval with a query string."""
+    _banner()
+
+    query = args.query
+    console.print(f"[bold]Testing knowledge retrieval:[/bold] {query}\n")
+
+    with _spinner("Querying knowledge sources…"):
+        results = engine.test_knowledge_retrieval(query)
+
+    # Summary
+    summary_table = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
+    summary_table.add_column(min_width=28)
+    summary_table.add_column()
+
+    def _bool_status(val: bool) -> str:
+        return "[green]✓ available[/green]" if val else "[dim]not available[/dim]"
+
+    summary_table.add_row("Confluence retriever", _bool_status(results["confluence_available"]))
+    summary_table.add_row("Rovo retriever", _bool_status(results["rovo_available"]))
+    summary_table.add_row("Local policy", _bool_status(results["local_policy_available"]))
+    summary_table.add_row("Routing rules", str(results["local_routing_rules_count"]))
+    summary_table.add_row("Approval rules", str(results["local_approval_rules_count"]))
+    summary_table.add_row("Local examples", str(results["local_examples_count"]))
+    summary_table.add_row("Snippets retrieved", str(len(results["snippets"])))
+    console.print(Panel(summary_table, title="Knowledge Sources", padding=(0, 1)))
+
+    if results["snippets"]:
+        console.print("\n[bold]Retrieved Snippets:[/bold]\n")
+        for i, snippet in enumerate(results["snippets"], 1):
+            title = snippet["title"]
+            source_type = snippet.get("source_type", "unknown")
+            url = snippet.get("source_url") or ""
+            preview = snippet.get("content_preview", "")
+            console.print(
+                Panel(
+                    f"[dim]{preview}[/dim]",
+                    title=f"[bold]{i}. {title}[/bold]  [dim]({source_type})[/dim]"
+                    + (f"  {url}" if url else ""),
+                    border_style="dim",
+                    padding=(0, 1),
+                )
+            )
+    else:
+        console.print("[yellow]No knowledge snippets retrieved.[/yellow]")
+
+    if results["matching_examples"]:
+        console.print("\n[bold]Matching Local Examples:[/bold]")
+        for ex in results["matching_examples"]:
+            console.print(
+                f"  [cyan]{ex['key']}[/cyan]  {ex['summary'][:60]}  "
+                f"[dim]({ex['category']})[/dim]"
+            )
+
+
+def cmd_export_examples(args, engine: TriageEngine, jsm: Optional[JSMClient]):
+    """Export approved feedback examples to a JSONL file."""
+    _banner()
+
+    store = FeedbackStore()
+    stats = store.get_statistics()
+
+    console.print(
+        f"Feedback store: {stats['total_triaged']} triaged, "
+        f"{stats['total_outcomes_recorded']} outcomes recorded, "
+        f"{stats['approved_examples']} approved examples\n"
+    )
+
+    output_path = Path(args.output) if args.output else None
+
+    with _spinner("Exporting approved examples…"):
+        count, path = store.export_examples_jsonl(output_path)
+
+    if count == 0:
+        console.print("[yellow]No approved examples to export.[/yellow]")
+        console.print(
+            "[dim]Use [bold]jsm-triage feedback <TICKET>[/bold] and approve "
+            "tickets as examples first.[/dim]"
+        )
+        return
+
+    console.print(
+        f"[green]✓[/green] Exported [bold]{count}[/bold] example(s) to [bold]{path}[/bold]"
+    )
+    console.print(
+        f"\n[dim]To use these examples for grounding, copy this file to your "
+        f"config directory as [bold]triage_examples.jsonl[/bold].[/dim]"
+    )
+
+
+def cmd_review_rules(args, engine: TriageEngine, jsm: Optional[JSMClient]):
+    """Show staged candidate rules pending admin review."""
+    _banner()
+
+    store = FeedbackStore()
+    staged = store.get_staged_rules()
+
+    if not staged:
+        console.print("[dim]No staged rules pending review.[/dim]")
+        return
+
+    console.print(
+        f"[bold]{len(staged)} staged rule candidate(s) pending admin review:[/bold]\n"
+    )
+    console.print(
+        "[yellow]⚠ These are suggestions only. Review carefully before adding "
+        "to config files.[/yellow]\n"
+    )
+
+    for i, rule in enumerate(staged, 1):
+        grid = Table.grid(padding=(0, 2))
+        grid.add_column(style="dim", min_width=18)
+        grid.add_column()
+        grid.add_row("Type", rule.get("rule_type", "unknown"))
+        grid.add_row("Status", rule.get("status", ""))
+        grid.add_row("Suggested", json.dumps(rule.get("suggested_rule", {}), indent=2))
+        grid.add_row("Supporting tickets", ", ".join(rule.get("supporting_tickets", [])))
+        grid.add_row("Notes", rule.get("notes", ""))
+        grid.add_row("Staged at", rule.get("timestamp", ""))
+
+        console.print(Panel(
+            grid,
+            title=f"[bold]Candidate {i}[/bold]",
+            border_style="yellow",
+            padding=(0, 1),
+        ))
+
+    console.print(
+        f"\n[dim]To apply: manually add approved rules to your config files "
+        f"in [bold]{engine._policy_loader.config_dir()}[/bold][/dim]"
+    )
 
 
 def cmd_chat(args, engine: TriageEngine, jsm: Optional[JSMClient]):
@@ -536,7 +941,6 @@ def cmd_chat(args, engine: TriageEngine, jsm: Optional[JSMClient]):
         "[bold]/quit[/bold] exit\n"
     )
 
-    # Slash-command completer
     slash_completer = WordCompleter(
         ["/new", "/quit", "/exit", "/ticket", "/help"],
         sentence=True,
@@ -550,7 +954,7 @@ def cmd_chat(args, engine: TriageEngine, jsm: Optional[JSMClient]):
     history_file = Path.home() / ".jsm_triage" / "chat_history"
     history_file.parent.mkdir(parents=True, exist_ok=True)
 
-    session: PromptSession = PromptSession(
+    session = PromptSession(
         history=FileHistory(str(history_file)),
         auto_suggest=AutoSuggestFromHistory(),
         completer=slash_completer,
@@ -571,7 +975,6 @@ def cmd_chat(args, engine: TriageEngine, jsm: Optional[JSMClient]):
         if not user_input:
             continue
 
-        # Slash commands
         if user_input.lower() in ("/quit", "/exit", "quit", "exit"):
             console.print("[dim]Goodbye.[/dim]")
             break
@@ -681,15 +1084,28 @@ def _chat_plain(args, engine: TriageEngine, jsm: Optional[JSMClient]):
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="jsm-triage",
-        description="AI-powered JSM helpdesk ticket triage  (OAuth 2.0 + multi-provider AI)",
+        description=(
+            "AI-powered JSM ticket triage for IAM/access management  "
+            "(OAuth 2.0 + multi-provider AI + Confluence grounding)"
+        ),
     )
     parser.add_argument(
         "--provider", "-p",
         metavar="NAME",
         help="Comma-separated provider order: azure_openai,github_copilot,openai,ms_copilot,rovo",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Analyse only – do not write to JSM")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Show raw JSON responses")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Analyse only – do not write to JSM")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Show raw JSON responses and debug info")
+    parser.add_argument("--config-dir", metavar="PATH",
+                        help="Path to policy config directory (overrides TRIAGE_CONFIG_DIR)")
+    parser.add_argument("--redact", action="store_true",
+                        help="Redact PII fields (reporter/assignee/description) before sending to AI")
+    parser.add_argument("--no-confluence", action="store_true",
+                        help="Disable Confluence knowledge retrieval")
+    parser.add_argument("--rovo-grounding", action="store_true",
+                        help="Enable Rovo-based knowledge retrieval (requires Rovo licence)")
 
     sub = parser.add_subparsers(dest="command")
 
@@ -700,44 +1116,79 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         choices=["atlassian", "azure", "github", "logout", "status"],
         default="status",
-        help="Provider to authenticate (default: status)",
     )
-    auth.add_argument(
-        "--provider-name",
-        dest="logout_provider",
-        metavar="PROVIDER",
-        help="Provider to logout (used with 'logout')",
-    )
+    auth.add_argument("--provider-name", dest="logout_provider", metavar="PROVIDER")
 
     # status
-    sub.add_parser("status", help="Show provider and JSM connection status")
+    sub.add_parser("status", help="Show provider, config, and JSM connection status")
 
     def _add_write_args(p):
-        p.add_argument("--no-comment",      action="store_true", help="Do not post AI comment to ticket")
-        p.add_argument("--no-label",        action="store_true", help="Do not add ai-triaged label")
-        p.add_argument("--update-priority", action="store_true", help="Overwrite ticket priority field")
+        p.add_argument("--no-comment",      action="store_true",
+                       help="Do not post AI comment to ticket")
+        p.add_argument("--no-label",        action="store_true",
+                       help="Do not add ai-triaged label")
+        p.add_argument("--update-priority", action="store_true",
+                       help="Overwrite ticket priority (use with caution)")
 
     # triage
     triage = sub.add_parser("triage", help="Triage one or more tickets")
-    triage.add_argument("ticket_keys", nargs="*", metavar="TICKET", help="e.g. IT-42 IT-43")
+    triage.add_argument("ticket_keys", nargs="*", metavar="TICKET")
     triage.add_argument("--service-desk", "-s", metavar="ID")
     triage.add_argument("--queue",        "-q", metavar="ID")
-    triage.add_argument("--jql",                metavar="JQL",  help="JQL query to select tickets")
+    triage.add_argument("--jql",                metavar="JQL")
     triage.add_argument("--limit",        "-l", type=int, default=20)
-    triage.add_argument("--output-json",        metavar="FILE", help="Save results as JSON file")
+    triage.add_argument("--output-json",        metavar="FILE",
+                        help="Save triage results as JSON")
     _add_write_args(triage)
 
     # watch
     watch = sub.add_parser("watch", help="Watch a queue and auto-triage new tickets")
     watch.add_argument("--service-desk", "-s", metavar="ID", required=True)
     watch.add_argument("--queue",        "-q", metavar="ID", required=True)
-    watch.add_argument("--interval",     "-i", type=int, default=60, help="Poll interval in seconds")
+    watch.add_argument("--interval",     "-i", type=int, default=60,
+                       help="Poll interval in seconds (default: 60)")
     watch.add_argument("--limit",        "-l", type=int, default=50)
     _add_write_args(watch)
 
+    # explain
+    explain = sub.add_parser("explain",
+                              help="Show detailed triage reasoning for a ticket")
+    explain.add_argument("ticket_key", metavar="TICKET")
+    explain.add_argument("--output-json", metavar="FILE",
+                         help="Save explanation JSON to file")
+
+    # feedback
+    feedback = sub.add_parser("feedback",
+                               help="Record a human outcome for a triaged ticket")
+    feedback.add_argument("ticket_key", metavar="TICKET")
+    feedback.add_argument(
+        "--outcome",
+        choices=["accepted", "corrected", "rejected"],
+        help="Outcome (skips interactive prompt)",
+    )
+
+    # validate-config
+    sub.add_parser("validate-config", help="Validate local policy configuration files")
+
+    # knowledge-test
+    kt = sub.add_parser("knowledge-test",
+                        help="Test Confluence/Rovo knowledge retrieval")
+    kt.add_argument("--query", "-q", required=True,
+                    help='Search query, e.g. "urgent termination access removal"')
+
+    # export-examples
+    export = sub.add_parser("export-examples",
+                             help="Export approved feedback as triage examples JSONL")
+    export.add_argument("--output", "-o", metavar="FILE",
+                        help="Output file path (default: ~/.jsm_triage/exported_examples.jsonl)")
+
+    # review-rules
+    sub.add_parser("review-rules",
+                   help="Show staged candidate routing/approval rules for admin review")
+
     # chat
     chat = sub.add_parser("chat", help="Interactive chat (optionally anchored to a ticket)")
-    chat.add_argument("--ticket", "-t", metavar="KEY", help="Ticket key for context (e.g. IT-42)")
+    chat.add_argument("--ticket", "-t", metavar="KEY")
 
     return parser
 
@@ -753,6 +1204,9 @@ def main():
     if args.command is None:
         parser.print_help()
         sys.exit(0)
+
+    # Configure logging early
+    configure_logging(verbose=getattr(args, "verbose", False))
 
     if args.command == "auth":
         cmd_auth(args)
@@ -779,7 +1233,9 @@ def main():
 
     providers = build_provider_chain(preferred, instances=provider_instances)
 
-    if not providers:
+    # Commands that don't require AI providers
+    no_provider_commands = {"validate-config", "export-examples", "review-rules", "feedback"}
+    if not providers and args.command not in no_provider_commands:
         console.print("[red]✗[/red] No AI providers configured.")
         console.print(
             "  Run [bold]jsm-triage auth atlassian/azure/github[/bold] "
@@ -791,6 +1247,10 @@ def main():
     engine = TriageEngine(
         providers=providers,
         dry_run=getattr(args, "dry_run", False),
+        config_dir=getattr(args, "config_dir", None),
+        enable_confluence_grounding=not getattr(args, "no_confluence", False),
+        enable_rovo_grounding=getattr(args, "rovo_grounding", False),
+        redact_sensitive=getattr(args, "redact", False),
     )
 
     jsm: Optional[JSMClient] = None
@@ -802,10 +1262,16 @@ def main():
         console.print(f"[yellow]⚠[/yellow] JSM client unavailable: {exc}")
 
     command_map = {
-        "status": cmd_status,
-        "triage": cmd_triage,
-        "watch":  cmd_watch,
-        "chat":   cmd_chat,
+        "status":          cmd_status,
+        "triage":          cmd_triage,
+        "watch":           cmd_watch,
+        "explain":         cmd_explain,
+        "feedback":        cmd_feedback,
+        "validate-config": cmd_validate_config,
+        "knowledge-test":  cmd_knowledge_test,
+        "export-examples": cmd_export_examples,
+        "review-rules":    cmd_review_rules,
+        "chat":            cmd_chat,
     }
 
     cmd_fn = command_map.get(args.command)

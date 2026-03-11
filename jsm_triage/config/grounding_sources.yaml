@@ -1,0 +1,75 @@
+# grounding_sources.yaml
+# Confluence knowledge sources for triage grounding.
+#
+# This file configures which Confluence content is retrieved at triage time
+# to ground AI recommendations in your internal documentation.
+#
+# Retrieval is on-demand per triage request.
+# The system does NOT continuously index or crawl Confluence.
+#
+# Supported retrieval methods:
+#
+#   page_ids:     Always fetch these specific pages (authoritative policy docs).
+#                 Use for your most important IAM/access policy pages.
+#                 Find page ID in the Confluence URL: /wiki/spaces/SPACE/pages/PAGE_ID/...
+#
+#   cql_queries:  CQL queries that return policy/guidance pages.
+#                 Run these queries against your Confluence site.
+#                 See: https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/
+#
+#   spaces:       Confluence space keys to restrict text search.
+#                 The ticket summary/request type will be used as the search query.
+#
+#   labels:       Confluence page labels that tag policy/guidance pages.
+#                 Pages with these labels will be included in search results.
+#
+#   result_limit: Maximum pages to retrieve per query (default: 5).
+#                 Keep this low to avoid large prompts.
+#
+# ⚠ The service account (ATLASSIAN_EMAIL) must have read access to the spaces
+#   and pages configured here.
+#
+# ⚠ This file does nothing if ATLASSIAN_DOMAIN, ATLASSIAN_EMAIL, and
+#   ATLASSIAN_API_TOKEN are not configured, or if --no-confluence is passed.
+#
+# To test retrieval: jsm-triage knowledge-test --query "access request policy"
+
+# Specific authoritative policy pages to always fetch
+# Uncomment and replace with your actual page IDs:
+page_ids: []
+# page_ids:
+#   - "123456789"    # IT Access Request Policy
+#   - "987654321"    # IAM Standards and Procedures
+#   - "111222333"    # Privileged Access Management Policy
+#   - "444555666"    # Onboarding/Offboarding Runbook
+
+# CQL queries for policy/procedure discovery
+# These retrieve pages matching admin-curated patterns
+cql_queries: []
+# cql_queries:
+#   - 'label = "access-policy" AND space.key = "IT" ORDER BY lastmodified DESC'
+#   - 'label = "iam-procedure" AND space.key = "SECURITY" ORDER BY lastmodified DESC'
+#   - 'title = "Access Request Policy" AND space.key in ("IT", "SECURITY")'
+#   - 'ancestor = "123456789" AND type = page'  # All pages under a parent
+
+# Confluence space keys to include in text search
+# The triage ticket summary will be used as the search query within these spaces
+spaces: []
+# spaces:
+#   - "IT"           # IT department space
+#   - "SECURITY"     # Security team space
+#   - "INFRA"        # Infrastructure space
+#   - "ONBOARD"      # Onboarding space
+
+# Page labels used to tag policy/guidance pages
+# Pages with these labels will be preferentially returned in search results
+labels: []
+# labels:
+#   - "access-policy"
+#   - "iam-procedure"
+#   - "security-policy"
+#   - "triage-guidance"
+#   - "runbook"
+
+# Maximum pages to return per query (keep low to avoid prompt bloat)
+result_limit: 5

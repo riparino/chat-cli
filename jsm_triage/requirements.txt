@@ -18,5 +18,12 @@ msal>=1.28.0
 rich>=13.7.0            # panels, tables, spinners, markdown rendering
 prompt_toolkit>=3.0.43  # interactive chat prompt with history + completion
 
+# Policy configuration files (routing rules, approval rules)
+pyyaml>=6.0
+
+# Test dependencies (install via: pip install -e ".[test]")
+# pytest>=7.0
+# pytest-mock>=3.0
+
 # Atlassian JSM (no extra SDK needed – pure REST via requests)
 # GitHub Models (uses openai SDK with custom base_url)

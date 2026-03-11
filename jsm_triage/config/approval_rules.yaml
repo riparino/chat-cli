@@ -1,0 +1,152 @@
+# approval_rules.yaml
+# Rules for determining when approval is required and what type.
+#
+# These rules are injected into triage prompts to help the AI detect
+# approval requirements accurately.
+#
+# Field reference:
+#   category:             Must match a valid IAM category exactly.
+#   subcategory_pattern:  Substring match (case-insensitive).
+#   keywords:             Keywords in ticket summary/description.
+#   requires_approval:    true/false
+#   approval_type:        "Manager Approval" | "Security Team Approval" |
+#                         "VP/Director Approval" | "Business Owner Approval"
+#   notes:                Explanation (shown in prompts and review output).
+#
+# ⚠ This file is admin-curated. It is injected as prompt context, not enforced.
+
+rules:
+
+  # -----------------------------------------------------------------------
+  # Privileged / High-Risk Access – Security Team Approval always required
+  # -----------------------------------------------------------------------
+  - category: "Privileged Access"
+    requires_approval: true
+    approval_type: "Security Team Approval"
+    notes: >
+      All privileged access requests (PAM, break-glass, admin) require
+      Security Team approval. A time-bound justification is mandatory.
+
+  - category: "Cloud / Infrastructure Access"
+    subcategory_pattern: "azure rbac"
+    keywords: ["owner", "contributor", "admin", "privileged"]
+    requires_approval: true
+    approval_type: "Security Team Approval"
+    notes: >
+      Azure RBAC Contributor/Owner assignments require Security Team approval.
+      Reader-level assignments require Manager Approval only.
+
+  - category: "Cloud / Infrastructure Access"
+    subcategory_pattern: "aws iam"
+    keywords: ["admin", "AdministratorAccess", "poweruser", "privileged"]
+    requires_approval: true
+    approval_type: "Security Team Approval"
+    notes: "AWS IAM admin/privileged policies require Security Team approval."
+
+  - category: "Cloud / Infrastructure Access"
+    subcategory_pattern: "production"
+    keywords: ["production", "prod environment", "live environment"]
+    requires_approval: true
+    approval_type: "Manager Approval"
+    notes: "Production environment access requires manager approval."
+
+  # -----------------------------------------------------------------------
+  # Standard Access Requests – Manager Approval required
+  # -----------------------------------------------------------------------
+  - category: "New Access Request"
+    requires_approval: true
+    approval_type: "Manager Approval"
+    notes: "All new access requests require manager approval."
+
+  - category: "Access Change"
+    requires_approval: true
+    approval_type: "Manager Approval"
+    notes: "Access changes (role upgrades, permission additions) require manager approval."
+
+  - category: "Application Access"
+    requires_approval: true
+    approval_type: "Manager Approval"
+    notes: "Application access requests require manager approval."
+
+  - category: "Developer Tooling Access"
+    requires_approval: true
+    approval_type: "Manager Approval"
+    notes: "Developer tooling access requires manager approval."
+
+  - category: "License / Entitlement"
+    requires_approval: true
+    approval_type: "Manager Approval"
+    notes: "License assignments require manager approval for cost governance."
+
+  # -----------------------------------------------------------------------
+  # Contractor / Vendor Access – additional requirements
+  # -----------------------------------------------------------------------
+  - category: "New Access Request"
+    keywords: ["contractor", "vendor", "third party", "external", "consultant", "agency"]
+    requires_approval: true
+    approval_type: "Manager Approval"
+    notes: >
+      Contractor/vendor access requires: (1) internal manager sponsor,
+      (2) access end date, (3) business justification.
+      All three must be present in the ticket.
+
+  - category: "Access Change"
+    subcategory_pattern: "contractor access extension"
+    keywords: ["extension", "extend", "renewal", "renew"]
+    requires_approval: true
+    approval_type: "Manager Approval"
+    notes: "Contractor access extensions require manager re-approval and updated end date."
+
+  # -----------------------------------------------------------------------
+  # Onboarding with privileged access
+  # -----------------------------------------------------------------------
+  - category: "Onboarding"
+    keywords: ["admin", "privileged", "elevated", "production"]
+    requires_approval: true
+    approval_type: "Security Team Approval"
+    notes: "Onboarding that includes privileged access requires Security Team approval."
+
+  # -----------------------------------------------------------------------
+  # Service Accounts
+  # -----------------------------------------------------------------------
+  - category: "Privileged Access"
+    subcategory_pattern: "service account"
+    keywords: ["service account", "service principal", "managed identity"]
+    requires_approval: true
+    approval_type: "Security Team Approval"
+    notes: >
+      Service account creation requires Security Team approval.
+      The request must include: purpose, owning team, access scope, rotation schedule.
+
+  # -----------------------------------------------------------------------
+  # Access Removal – generally does not require approval but may need verification
+  # -----------------------------------------------------------------------
+  - category: "Access Removal"
+    requires_approval: false
+    notes: >
+      Standard access removal does not require approval, but should be
+      verified against an offboarding ticket or manager request.
+
+  - category: "Offboarding"
+    requires_approval: false
+    notes: >
+      Offboarding triggers do not require approval, but must be verified
+      against HR termination data. Urgent terminations: escalate to Security.
+
+  # -----------------------------------------------------------------------
+  # No approval required for self-service / L1 actions
+  # -----------------------------------------------------------------------
+  - category: "Password / Account Recovery"
+    requires_approval: false
+    notes: "Password resets and account unlocks are self-service or L1 actions."
+
+  - category: "Authentication / MFA"
+    keywords: ["mfa setup", "mfa enrollment", "authenticator app"]
+    requires_approval: false
+    notes: "Standard MFA enrollment does not require approval."
+
+  - category: "Authentication / MFA"
+    keywords: ["mfa reset", "mfa bypass", "conditional access exception"]
+    requires_approval: true
+    approval_type: "Security Team Approval"
+    notes: "MFA reset or conditional access exceptions require Security Team approval."

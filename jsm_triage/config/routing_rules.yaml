@@ -1,0 +1,185 @@
+# routing_rules.yaml
+# Category/subcategory → team routing rules.
+#
+# These rules are injected into every triage prompt to improve routing accuracy.
+# Rules are evaluated by the AI model using keyword matching and category inference;
+# they are NOT applied programmatically by the triage engine.
+#
+# Field reference:
+#   category:             Must match one of the valid IAM categories exactly.
+#   subcategory_pattern:  Substring match against the ticket's subcategory (case-insensitive).
+#   keywords:             List of keywords to look for in ticket summary/description.
+#   team:                 Human-readable team name for the suggested_team field.
+#   assignment_group:     JSM assignment group name for the assignment_group field.
+#   priority_hint:        Optional priority override hint (Critical/High/Medium/Low).
+#   notes:                Explanation for this rule (shown in review-rules output).
+#
+# ⚠ This file is admin-curated. Rules are injected as context, not enforced.
+#   The AI model uses these as guidance, not hard rules.
+
+rules:
+
+  # -----------------------------------------------------------------------
+  # Entra ID / Azure AD / Group Membership
+  # -----------------------------------------------------------------------
+  - category: "Group Membership"
+    subcategory_pattern: "entra"
+    keywords: ["entra group", "azure ad group", "active directory group", "security group", "M365 group"]
+    team: "IT IAM Team"
+    assignment_group: "IAM - Entra ID"
+    notes: "Entra group changes are handled by the IAM team."
+
+  - category: "Group Membership"
+    subcategory_pattern: "distribution"
+    keywords: ["distribution list", "DL", "mailing list", "email group"]
+    team: "IT IAM Team"
+    assignment_group: "IAM - Exchange/M365"
+    notes: "Distribution list membership managed by IAM team."
+
+  # -----------------------------------------------------------------------
+  # Azure / Cloud / Infrastructure
+  # -----------------------------------------------------------------------
+  - category: "Cloud / Infrastructure Access"
+    subcategory_pattern: "azure rbac"
+    keywords: ["azure role", "rbac", "azure subscription", "azure resource group", "contributor", "owner role"]
+    team: "Cloud Platform Team"
+    assignment_group: "Cloud - Azure"
+    priority_hint: "High"
+    notes: "Azure RBAC role assignments require Cloud Platform Team and often Security approval."
+
+  - category: "Cloud / Infrastructure Access"
+    subcategory_pattern: "aws iam"
+    keywords: ["aws", "iam role", "s3", "ec2", "lambda", "eks", "aws access key"]
+    team: "Cloud Platform Team"
+    assignment_group: "Cloud - AWS"
+    priority_hint: "High"
+    notes: "AWS IAM changes handled by Cloud Platform Team."
+
+  - category: "Cloud / Infrastructure Access"
+    keywords: ["vpn", "vpn access", "remote access", "tunnel"]
+    team: "IT IAM Team"
+    assignment_group: "IAM - Network Access"
+    notes: "VPN access provisioning."
+
+  - category: "Cloud / Infrastructure Access"
+    subcategory_pattern: "terraform"
+    keywords: ["terraform", "iac", "infrastructure as code", "pulumi"]
+    team: "Cloud Platform Team"
+    assignment_group: "Cloud - Platform Engineering"
+
+  # -----------------------------------------------------------------------
+  # Privileged Access
+  # -----------------------------------------------------------------------
+  - category: "Privileged Access"
+    keywords: ["break-glass", "emergency access", "pam", "privileged", "admin access", "privileged account"]
+    team: "Security Team"
+    assignment_group: "Security - PAM"
+    priority_hint: "High"
+    notes: "Privileged access requests require Security Team approval and time-bounded justification."
+
+  - category: "Privileged Access"
+    subcategory_pattern: "service account"
+    keywords: ["service account", "service principal", "managed identity", "non-human identity"]
+    team: "IT IAM Team"
+    assignment_group: "IAM - Service Accounts"
+    notes: "Service account requests require business justification and owner designation."
+
+  # -----------------------------------------------------------------------
+  # Developer Tooling
+  # -----------------------------------------------------------------------
+  - category: "Developer Tooling Access"
+    subcategory_pattern: "github"
+    keywords: ["github", "git", "repository", "repo access", "github org", "github team"]
+    team: "Developer Platform Team"
+    assignment_group: "Dev Platform - GitHub"
+    notes: "GitHub org/repo access managed by Developer Platform Team."
+
+  - category: "Developer Tooling Access"
+    keywords: ["ci/cd", "jenkins", "github actions", "gitlab", "sonarqube", "artifactory", "nexus"]
+    team: "Developer Platform Team"
+    assignment_group: "Dev Platform - CI/CD"
+
+  - category: "Developer Tooling Access"
+    keywords: ["atlassian", "jira", "confluence", "bitbucket", "jira project", "confluence space"]
+    team: "IT IAM Team"
+    assignment_group: "IAM - Atlassian"
+    notes: "Atlassian product access managed by IAM team."
+
+  # -----------------------------------------------------------------------
+  # Application Access
+  # -----------------------------------------------------------------------
+  - category: "Application Access"
+    keywords: ["salesforce", "sfdc", "crm"]
+    team: "Business Applications Team"
+    assignment_group: "BizApps - Salesforce"
+    notes: "Salesforce access managed by Business Applications Team."
+
+  - category: "Application Access"
+    keywords: ["sap", "oracle", "erp", "workday", "hr system"]
+    team: "Business Applications Team"
+    assignment_group: "BizApps - ERP"
+    notes: "ERP/HR system access managed by Business Applications Team."
+
+  - category: "Application Access"
+    keywords: ["servicenow", "snow", "itsm platform"]
+    team: "IT Service Desk"
+    assignment_group: "ITSM - Platform"
+
+  # -----------------------------------------------------------------------
+  # Shared Mailbox / Distribution List
+  # -----------------------------------------------------------------------
+  - category: "Shared Mailbox / Distribution List"
+    keywords: ["shared mailbox", "shared inbox", "team mailbox", "functional mailbox"]
+    team: "IT IAM Team"
+    assignment_group: "IAM - Exchange/M365"
+    notes: "Shared mailbox provisioning/access managed by IAM team."
+
+  # -----------------------------------------------------------------------
+  # Onboarding / Offboarding
+  # -----------------------------------------------------------------------
+  - category: "Onboarding"
+    keywords: ["new starter", "new employee", "new hire", "new joiner", "onboarding"]
+    team: "IT Service Desk L1"
+    assignment_group: "Service Desk - Onboarding"
+    notes: "Standard onboarding handled by L1 unless privileged access is needed."
+
+  - category: "Offboarding"
+    keywords: ["leaver", "offboarding", "leaving", "resignation", "termination"]
+    team: "IT IAM Team"
+    assignment_group: "IAM - Offboarding"
+    notes: "Offboarding/leaver tickets require IAM team for access removal."
+
+  - category: "Offboarding"
+    subcategory_pattern: "urgent termination"
+    keywords: ["urgent termination", "immediate", "suspended", "same day", "security concern"]
+    team: "IT IAM Team"
+    assignment_group: "IAM - Offboarding"
+    priority_hint: "Critical"
+    notes: "Urgent terminations: escalate to IAM + Security immediately."
+
+  # -----------------------------------------------------------------------
+  # Password / Account Recovery
+  # -----------------------------------------------------------------------
+  - category: "Password / Account Recovery"
+    keywords: ["password reset", "locked out", "account locked", "forgot password", "unlock account"]
+    team: "IT Service Desk L1"
+    assignment_group: "Service Desk - L1"
+    notes: "Standard password resets handled by L1."
+
+  # -----------------------------------------------------------------------
+  # License / Entitlement
+  # -----------------------------------------------------------------------
+  - category: "License / Entitlement"
+    keywords: ["license", "licence", "software seat", "subscription", "m365 license", "adobe", "github copilot license"]
+    team: "IT IAM Team"
+    assignment_group: "IAM - License Management"
+    notes: "License assignment managed by IAM team via license management portal."
+
+  # -----------------------------------------------------------------------
+  # Authentication / MFA
+  # -----------------------------------------------------------------------
+  - category: "Authentication / MFA"
+    keywords: ["mfa", "multi-factor", "authenticator", "fido2", "yubikey", "sso", "saml", "oidc", "conditional access"]
+    team: "IT IAM Team"
+    assignment_group: "IAM - Authentication"
+    notes: "MFA/SSO/FIDO2 configuration handled by IAM team."

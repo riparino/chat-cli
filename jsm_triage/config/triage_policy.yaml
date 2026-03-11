@@ -1,0 +1,98 @@
+# triage_policy.yaml
+# General IAM triage policy configuration.
+#
+# This file provides:
+#   - org_context: Free-text description of your org, teams, and key systems.
+#                  Injected into every triage prompt to improve routing accuracy.
+#   - vip_indicators: Email domain patterns, job title keywords, or group names
+#                     that should trigger higher-priority triage.
+#   - urgent_termination_indicators: Keywords that indicate an urgent leaver scenario
+#                                    requiring same-day access removal.
+#   - policy_summary: High-level policy text to inject into triage prompts.
+#
+# ⚠ This file is admin-curated. It does not update automatically.
+#   Update it whenever your org structure, policies, or systems change.
+#
+# IMPORTANT: Do not put secrets, passwords, or personal data in this file.
+
+# --------------------------------------------------------------------------
+# Org context
+# Describe your organisation, key systems, and team structure.
+# This is injected verbatim into every triage prompt.
+# --------------------------------------------------------------------------
+org_context: |
+  We are an enterprise organisation using Microsoft 365, Entra ID (Azure AD),
+  AWS, GitHub Enterprise, Atlassian (Jira/Confluence/JSM), and Salesforce.
+  Our IT teams are structured as:
+    - IT Service Desk L1 (general support, password resets, basic access)
+    - IT IAM Team (Entra ID, Azure RBAC, conditional access, SSO)
+    - Cloud Platform Team (AWS IAM, Azure subscriptions, infrastructure access)
+    - Developer Platform Team (GitHub, CI/CD, developer tooling)
+    - Security Team (privileged access, PAM, break-glass, security incidents)
+    - Business Applications Team (Salesforce, SAP, Oracle ERP)
+  SLAs: Critical = 2h, High = 4h, Medium = 1 business day, Low = 3 business days.
+  All new employees onboard via the HR system (Workday) and ITSM (Jira JSM).
+
+# --------------------------------------------------------------------------
+# Policy summary
+# High-level policy text injected into triage prompts when no Confluence
+# knowledge is available. Keep this concise.
+# --------------------------------------------------------------------------
+policy_summary: |
+  Access Request Policy:
+  - All access requests require manager approval if they involve production systems,
+    privileged roles, or external/vendor-facing systems.
+  - Standard access requests (non-privileged, internal tools) require manager justification
+    but do not need a separate approval ticket.
+  - Privileged access (admin, PAM, break-glass) requires Security Team approval
+    and a time-bounded justification.
+  - Contractor access requires sponsorship from an internal manager and must include
+    an access end date.
+  - Urgent termination requests (same-day leaver) must be escalated to the IAM Team
+    and Security Team immediately.
+
+  Onboarding Policy:
+  - New employee accounts are provisioned automatically via Workday-Entra ID sync.
+  - Additional application access requires a service request with manager approval.
+  - Contractors/temps require manual provisioning via a service request.
+
+  Offboarding Policy:
+  - Standard leavers: access removed within 24h of termination effective date.
+  - Urgent/same-day leavers: escalate to IAM Team and Security Team immediately.
+  - Shared accounts, service accounts, and distribution lists must be reviewed
+    and updated as part of the offboarding process.
+
+# --------------------------------------------------------------------------
+# VIP indicators
+# Ticket reporters or assignees matching these patterns should get elevated
+# triage priority (High or Critical).
+# Use email domain prefixes, job title keywords, or group names.
+# --------------------------------------------------------------------------
+vip_indicators:
+  - "CTO"
+  - "CEO"
+  - "CFO"
+  - "VP of"
+  - "Chief "
+  - "Executive"
+  - "Board"
+  - "@board."
+  - "CISO"
+
+# --------------------------------------------------------------------------
+# Urgent termination indicators
+# Keywords in the ticket summary or description that indicate an urgent
+# leaver scenario requiring same-day access removal and immediate escalation.
+# --------------------------------------------------------------------------
+urgent_termination_indicators:
+  - "urgent termination"
+  - "immediate termination"
+  - "same day termination"
+  - "suspended employee"
+  - "terminated today"
+  - "security concern"
+  - "involuntary"
+  - "immediate leaver"
+  - "emergency offboarding"
+  - "disciplinary"
+  - "resignation effective immediately"
