@@ -14,5 +14,9 @@ azure-ai-inference>=1.0.0b4
 # Azure MSAL for device-code OAuth flow (Azure provider 3LO)
 msal>=1.28.0
 
+# TUI
+rich>=13.7.0            # panels, tables, spinners, markdown rendering
+prompt_toolkit>=3.0.43  # interactive chat prompt with history + completion
+
 # Atlassian JSM (no extra SDK needed – pure REST via requests)
 # GitHub Models (uses openai SDK with custom base_url)
