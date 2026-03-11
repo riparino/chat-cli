@@ -51,6 +51,12 @@ class GitHubOAuth:
     def is_configured(self) -> bool:
         return bool(self._client_id)
 
+    def get_valid_token(self) -> Optional[str]:
+        """Return the stored token if it exists and is not expired, else None."""
+        if self._store.is_expired(PROVIDER_KEY):
+            return None
+        return self._store.access_token(PROVIDER_KEY)
+
     def get_access_token(self) -> str:
         """Return stored GitHub access token (GitHub tokens don't expire by default)."""
         token = self._store.access_token(PROVIDER_KEY)

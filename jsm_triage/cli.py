@@ -188,8 +188,11 @@ def _oauth_status_table() -> Table:
         entry = _token_store.get(key)
         if entry:
             if _token_store.is_expired(key):
-                rt = _token_store.refresh_token(key)
-                state = Text("expired (refresh available)", style="yellow")
+                has_refresh = bool(_token_store.refresh_token(key))
+                state = Text(
+                    "expired (refresh available)" if has_refresh else "expired",
+                    style="yellow",
+                )
             else:
                 state = Text("✓ logged in", style="green")
         else:

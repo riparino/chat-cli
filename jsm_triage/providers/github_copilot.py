@@ -34,9 +34,9 @@ class GitHubCopilotProvider(OpenAICompatibleProvider):
 
     def _resolve_token(self) -> str:
         if self._github_oauth and self._github_oauth.is_configured():
-            stored = self._github_oauth._store.access_token("github")
-            if stored and not self._github_oauth._store.is_expired("github"):
-                return stored
+            token = self._github_oauth.get_valid_token()
+            if token:
+                return token
         token = os.getenv("GITHUB_TOKEN")
         if not token:
             raise ProviderError(
@@ -46,8 +46,7 @@ class GitHubCopilotProvider(OpenAICompatibleProvider):
 
     def is_available(self) -> bool:
         if self._github_oauth and self._github_oauth.is_configured():
-            stored = self._github_oauth._store.access_token("github")
-            if stored and not self._github_oauth._store.is_expired("github"):
+            if self._github_oauth.get_valid_token():
                 return True
         return bool(os.getenv("GITHUB_TOKEN"))
 
