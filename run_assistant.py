@@ -1,76 +1,102 @@
 #!/usr/bin/env python3
-"""
-Simple launcher script for the Security Incident Triage Assistant
-"""
+"""Launcher for the Security Incident Triage Assistant CLI."""
 
-import subprocess
+from __future__ import annotations
+
+import importlib.util
 import sys
-import os
 from pathlib import Path
 
-def check_requirements():
-    """Check if required dependencies are installed"""
-    try:
-        import openai
-        import dotenv
-        return True
-    except ImportError as e:
-        print(f"❌ Missing required dependency: {e}")
-        print("📦 Installing requirements...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-            print("✅ Requirements installed successfully!")
-            return True
-        except subprocess.CalledProcessError:
-            print("❌ Failed to install requirements. Please run: pip install -r requirements.txt")
-            return False
+REQUIRED_MODULES = {
+    "openai": "openai",
+    "dotenv": "python-dotenv",
+    "azure.identity": "azure-identity",
+}
 
-def check_env_file():
-    """Check if .env file exists and has required variables"""
+
+def _missing_dependencies() -> list[str]:
+    missing: list[str] = []
+    for module, package in REQUIRED_MODULES.items():
+        if importlib.util.find_spec(module) is None:
+            missing.append(package)
+    return sorted(set(missing))
+
+
+def check_python_version() -> bool:
+    """Require a modern Python runtime for type hints/features used here."""
+    if sys.version_info >= (3, 9):
+        return True
+
+    print(f"❌ Python 3.9+ is required, found {sys.version.split()[0]}.")
+    return False
+
+
+def check_requirements() -> bool:
+    """Validate dependencies without auto-installing packages at runtime."""
+    missing = _missing_dependencies()
+    if not missing:
+        return True
+
+    print("❌ Missing required dependencies:")
+    for package in missing:
+        print(f"   - {package}")
+    print("\nInstall them with:\n   pip install -r requirements.txt")
+    return False
+
+
+def _read_env_values(path: Path) -> dict[str, str]:
+    """Read simple KEY=VALUE pairs from .env-like files."""
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def check_env_file() -> bool:
+    """Ensure .env exists and contains valid required values."""
     env_file = Path(".env")
     if not env_file.exists():
-        print("❌ .env file not found!")
-        print("📝 Please create a .env file with the following variables:")
-        print("   ENDPOINT_URL=your_azure_openai_endpoint")
-        print("   DEPLOYMENT_NAME=your_model_deployment_name")
+        print("❌ .env file not found.")
+        print("📝 Copy .env.example to .env and set real values.")
         return False
-    
-    # Check if required variables are present
-    with open(env_file, 'r') as f:
-        content = f.read()
-        if "ENDPOINT_URL" not in content:
-            print("⚠️  .env file exists but missing required variables:")
-            print("   ENDPOINT_URL=your_azure_openai_endpoint")
-            print("   DEPLOYMENT_NAME=your_model_deployment_name")
-            return False
-    
+
+    values = _read_env_values(env_file)
+    required = ["ENDPOINT_URL", "DEPLOYMENT_NAME"]
+
+    missing = [key for key in required if not values.get(key)]
+    if missing:
+        print(f"❌ .env is missing required values: {', '.join(missing)}")
+        return False
+
+    if not values["ENDPOINT_URL"].startswith("https://"):
+        print("❌ ENDPOINT_URL must start with 'https://'.")
+        return False
+
     return True
 
-def main():
-    """Main launcher function"""
-    print("🚀 Starting Security Incident Triage Assistant...")
+
+def main() -> None:
+    print("🚀 Starting Security Incident Triage Assistant")
     print("=" * 50)
-    
-    # Check requirements
-    if not check_requirements():
-        sys.exit(1)
-    
-    # Check environment file
-    if not check_env_file():
-        sys.exit(1)
-    
-    print("✅ All checks passed! Starting assistant...")
+
+    if not check_python_version() or not check_requirements() or not check_env_file():
+        raise SystemExit(1)
+
+    print("✅ Environment checks passed. Launching assistant...")
     print("=" * 50)
-    
-    # Launch the assistant
+
     try:
         from assistant import main as assistant_main
+
         assistant_main()
     except KeyboardInterrupt:
         print("\n👋 Assistant stopped by user.")
-    except Exception as e:
-        print(f"❌ Error starting assistant: {e}")
-        sys.exit(1)
+        raise SystemExit(0)
+
 
 if __name__ == "__main__":
     main()

@@ -1,155 +1,84 @@
 # Security Incident Triage Assistant CLI
 
-A persistent chat interface for Azure OpenAI Assistant with session management, designed specifically for security incident analysis and triage.
+A clean, persistent command-line chat assistant for Azure OpenAI, focused on security incident triage.
 
-## Features
+## Highlights
 
-✅ **Persistent Sessions**: Automatically saves and restores your assistant and conversation threads  
-✅ **Cross-Platform**: Works on Windows, Linux, and macOS  
-✅ **Interactive CLI**: Full-featured command-line interface with helpful commands  
-✅ **Error Handling**: Robust error handling and graceful recovery  
-✅ **Session Management**: Maintains context across multiple sessions  
-✅ **Security Focus**: Specialized for security incident analysis and KQL queries  
+- **Structured**: launcher checks and chat runtime are separated.
+- **Easy setup**: preflight checks for Python, dependencies, and `.env` values.
+- **Secure defaults**: Entra ID auth + private local session file permissions.
+- **Reliable UX**: graceful shutdown, session restore, and configurable run timeouts.
 
-## Prerequisites
+## Requirements
 
-- Python 3.7 or higher
-- Azure OpenAI account with deployed model
-- Azure subscription with Entra ID authentication configured
-- Appropriate Azure RBAC permissions for Azure OpenAI
+- Python **3.9+**
+- Azure OpenAI resource + deployment name
+- Entra ID authentication available locally (`az login`, service principal, or managed identity)
 
-## Setup
+Install dependencies:
 
-1. **Clone or download this repository**
+```bash
+pip install -r requirements.txt
+```
 
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Configuration
 
-3. **Configure Azure authentication** (choose one method):
-   - **Azure CLI**: Run `az login` to authenticate
-   - **Service Principal**: Set environment variables `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
-   - **Managed Identity**: If running on Azure compute resources
+Copy and edit environment file:
 
-4. **Create a `.env` file** in the project directory with your Azure OpenAI endpoint:
-   ```env
-   ENDPOINT_URL=https://your-resource.openai.azure.com/
-   DEPLOYMENT_NAME=your_model_deployment_name
-   ```
+```bash
+cp .env.example .env
+```
 
-5. **Run the assistant:**
-   ```bash
-   python assistant.py
-   ```
-   
-   Or use the launcher script:
-   ```bash
-   python run_assistant.py
-   ```
+Required values:
 
-## Usage
+```env
+ENDPOINT_URL=https://your-resource.openai.azure.com/
+DEPLOYMENT_NAME=your_model_deployment_name
+```
 
-### Starting the Assistant
+Optional value:
 
-When you first run the application, it will:
-- Connect to Azure OpenAI
-- Create a new security assistant (or restore existing one)
-- Start a new conversation thread (or continue previous one)
-- Display a welcome message with available commands
+```env
+ASSISTANT_RUN_TIMEOUT_SECONDS=180
+```
 
-### Commands
+## Run
+
+Recommended (includes preflight checks):
+
+```bash
+python run_assistant.py
+```
+
+Direct runtime:
+
+```bash
+python assistant.py
+```
+
+## Interactive commands
 
 | Command | Description |
-|---------|-------------|
-| `help` | Show available commands and examples |
+|---|---|
+| `help` | Show command help and examples |
 | `new` | Start a new conversation thread |
-| `quit` or `exit` | Exit the application (saves session) |
-| `Ctrl+C` | Quick exit with session save |
+| `status` | Show current config/session metadata |
+| `quit` / `exit` | Save session and close |
 
-### Example Interactions
+## Security notes
 
-```
-💬 You: Analyze incident INC-12345
-🤖 Assistant: I'd be happy to help you analyze incident INC-12345...
+- Session metadata is written to `~/.security_assistant_session.json`.
+- Session writes are **atomic** and permissions are restricted to user read/write (`0600`).
+- Required env vars are validated before startup.
+- Assistant run polling uses a timeout to avoid hanging forever.
 
-💬 You: Show me KQL to find failed logins
-🤖 Assistant: Here's a KQL query to find failed login attempts...
+## Project structure
 
-💬 You: What entities are involved in the current incident?
-🤖 Assistant: Based on our previous discussion about INC-12345...
-```
-
-## Session Management
-
-The assistant automatically manages sessions through a hidden file in your home directory (`.security_assistant_session.json`). This enables:
-
-- **Assistant Persistence**: Reuses the same assistant configuration across sessions
-- **Conversation Continuity**: Maintains conversation history and context
-- **Automatic Recovery**: Handles cases where assistants or threads no longer exist
-
-## File Structure
-
-```
+```text
 chat-cli/
-├── assistant.py           # Main CLI application
-├── run_assistant.py      # Launcher script with checks
-├── requirements.txt      # Python dependencies
-├── .env                 # Azure OpenAI credentials (you create this)
-└── README.md           # This file
+├── assistant.py        # Main interactive runtime
+├── run_assistant.py    # Preflight checks + launcher
+├── requirements.txt    # Runtime dependencies
+├── .env.example        # Environment template
+└── README.md           # Documentation
 ```
-
-## Dependencies
-
-- `openai` - Azure OpenAI Python SDK
-- `python-dotenv` - Environment variable management
-
-## Cross-Platform Support
-
-This CLI works on all major platforms:
-
-- **Windows**: Run with `python assistant.py` or `py assistant.py`
-- **Linux/macOS**: Run with `python3 assistant.py` or make executable with `chmod +x assistant.py && ./assistant.py`
-
-## Security Features
-
-The assistant is specifically designed for security incident analysis with:
-
-- Built-in understanding of security incident workflows
-- KQL query generation and optimization
-- Azure Sentinel integration knowledge
-- Entity analysis and correlation
-- Investigation timeline creation
-- Pattern recognition and threat hunting
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Missing .env file**:
-   ```
-   ❌ Error: Missing required environment variables.
-   ```
-   **Solution**: Create a `.env` file with your Azure OpenAI credentials.
-
-2. **Invalid credentials**:
-   ```
-   ❌ Failed to initialize Azure OpenAI client
-   ```
-   **Solution**: Verify your `ENDPOINT_URL` and `AZURE_OPENAI_API_KEY` in the `.env` file.
-
-3. **Assistant no longer exists**:
-   ```
-   ⚠️  Previous assistant no longer exists, creating new one...
-   ```
-   **Solution**: This is normal - the CLI will automatically create a new assistant.
-
-### Getting Help
-
-- Use the `help` command within the CLI for usage instructions
-- Check that your Azure OpenAI deployment is active and accessible
-- Ensure your API key has the necessary permissions
-
-## License
-
-This project is provided as-is for educational and development purposes.
