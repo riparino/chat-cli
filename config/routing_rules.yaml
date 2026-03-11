@@ -1,0 +1,7 @@
+{
+  "rules": [
+    {"category": "Offboarding", "subcategory": "Urgent termination deprovisioning", "fulfilling_team": "Identity Operations", "assignment_group": "IAM-L2"},
+    {"category": "Privileged Access", "subcategory": "Break-glass access", "fulfilling_team": "PAM Operations", "assignment_group": "Security-IAM-PAM"},
+    {"category": "Developer Tooling Access", "subcategory": "GitHub org/repo access", "fulfilling_team": "DevEx Platform", "assignment_group": "DevEx-Access"}
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "categories": [
+    "New Access Request",
+    "Access Change",
+    "Access Removal",
+    "Onboarding",
+    "Offboarding",
+    "Privileged Access",
+    "Shared Mailbox / Distribution List",
+    "Group Membership",
+    "License / Entitlement",
+    "Authentication / MFA",
+    "Password / Account Recovery",
+    "Application Access",
+    "Cloud / Infrastructure Access",
+    "Developer Tooling Access",
+    "Insufficient Information",
+    "Policy Exception / Special Handling"
+  ],
+  "required_fields_by_category": {
+    "Privileged Access": ["application_name", "system_environment", "business_justification", "duration_expiry", "manager_approval"],
+    "New Access Request": ["identity_target", "application_name", "business_justification"],
+    "Offboarding": ["identity_target", "termination_date", "manager_approval"]
+  },
+  "vip_keywords": ["vip", "exec", "c-level", "board"],
+  "urgent_termination_keywords": ["urgent termination", "immediate deprovision", "disable now"]
+}

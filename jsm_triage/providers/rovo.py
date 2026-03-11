@@ -22,7 +22,8 @@ from typing import Optional
 
 import requests
 
-from .base import AIProvider, TriageResult, ProviderError, parse_triage_json
+from .base import AIProvider, ProviderError, parse_triage_json
+from ..models import TriageResult, KnowledgeSnippet
 
 ROVO_CHAT_API = "https://api.atlassian.com/rovo/v1/chats"
 
@@ -117,6 +118,33 @@ class RovoProvider(AIProvider):
             status = exc.response.status_code if exc.response is not None else "?"
             raise ProviderError(f"Rovo chat error {status}: {exc}") from exc
 
+
+    def retrieve_knowledge(self, query: str, curated_queries: list[str] | None = None, max_snippets: int = 5) -> list[KnowledgeSnippet]:
+        if not self._session:
+            self._build_session()
+        prompts = curated_queries or []
+        combined = "\n".join([f"- {q}" for q in prompts[:5]])
+        message = (
+            "Return JSON array only with fields source_id,title,excerpt,url for Confluence guidance relevant to: "
+            f"{query}. Curated guidance focus:\n{combined}"
+        )
+        try:
+            resp = self._session.post(ROVO_CHAT_API, json={"message": message}, timeout=60)
+            resp.raise_for_status()
+            raw = self._extract_rovo_reply(resp.json())
+            data = json.loads(re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip())
+            out = []
+            if isinstance(data, list):
+                for row in data[:max_snippets]:
+                    out.append(KnowledgeSnippet(
+                        source_id=str(row.get("source_id") or row.get("title") or "rovo"),
+                        title=row.get("title", "Rovo snippet"),
+                        excerpt=row.get("excerpt", ""),
+                        url=row.get("url"),
+                    ))
+            return out
+        except Exception:
+            return []
     @staticmethod
     def _extract_rovo_reply(data: dict) -> str:
         """Pull the assistant text from Rovo API response."""
@@ -158,15 +186,28 @@ def _parse_rovo_response(raw: str, provider_name: str) -> TriageResult:
     summary = _extract_field(raw, r"\bsummary[:\s]+([^\n]+)")
 
     return TriageResult(
-        priority=priority or "Medium",
-        category=category or "General",
+        request_type="unknown",
+        category=category or "Insufficient Information",
         subcategory="",
-        suggested_team=_extract_field(raw, r"\bteam[:\s]+([^\n,\.]+)"),
-        suggested_assignee=None,
-        summary=summary or raw[:300],
+        business_impact="Medium",
+        urgency="Medium",
+        priority=priority or "Medium",
+        requires_approval=False,
+        approval_type=None,
+        required_information_missing=True,
+        missing_fields=[],
+        likely_fulfilling_team=_extract_field(raw, r"\bteam[:\s]+([^\n,\.]+)"),
+        likely_assignment_group=None,
         suggested_actions=_extract_list(raw),
-        escalate="escalat" in raw.lower(),
-        confidence=0.4,  # lower confidence for heuristic parse
+        recommended_next_step="request_more_info",
+        escalation_required="escalat" in raw.lower(),
+        escalation_reason=None,
+        confidence=0.4,
+        rationale=summary or raw[:300],
+        policy_references=[],
+        knowledge_sources_used=[],
+        facts=[],
+        inferences=[],
         provider_used=provider_name,
         raw_response=raw,
     )

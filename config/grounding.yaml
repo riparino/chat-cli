@@ -1,0 +1,10 @@
+{
+  "confluence_queries": [
+    "IAM onboarding access provisioning standard",
+    "Urgent termination deprovisioning runbook",
+    "Privileged access duration and approval policy"
+  ],
+  "confluence_spaces": ["IAM", "ITOPS"],
+  "confluence_labels": ["access-policy", "jsm-triage"],
+  "max_snippets": 5
+}

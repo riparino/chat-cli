@@ -20,3 +20,5 @@ prompt_toolkit>=3.0.43  # interactive chat prompt with history + completion
 
 # Atlassian JSM (no extra SDK needed – pure REST via requests)
 # GitHub Models (uses openai SDK with custom base_url)
+
+PyYAML>=6.0.1

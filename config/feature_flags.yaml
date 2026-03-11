@@ -1,0 +1,7 @@
+{
+  "dry_run_default": true,
+  "allow_comment_posting": false,
+  "allow_priority_updates": false,
+  "allow_label_updates": false,
+  "allow_assignment_suggestions": true
+}

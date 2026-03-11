@@ -1,0 +1,7 @@
+{
+  "rules": [
+    {"category": "Privileged Access", "requires_approval": true, "approval_type": "manager_and_system_owner"},
+    {"category": "Access Removal", "requires_approval": false},
+    {"category": "Policy Exception / Special Handling", "requires_approval": true, "approval_type": "iam_governance"}
+  ]
+}

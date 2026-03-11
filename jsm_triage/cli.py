@@ -53,7 +53,9 @@ from rich import box
 from .triage_engine import TriageEngine, build_provider_chain
 from .jsm.client import JSMClient
 from .jsm.models import Ticket
-from .providers.base import TriageResult
+from .models import TriageResult
+from .config import load_app_config, validate_config
+from .feedback import FeedbackStore
 from .auth import AtlassianOAuth, AzureOAuth, GitHubOAuth, PROVIDER_LABELS
 from .auth.token_store import TokenStore
 
@@ -139,15 +141,15 @@ def _render_result(ticket: Ticket, result: TriageResult, verbose: bool = False):
     grid.add_row("Provider", f"{result.provider_used}  [dim]({result.confidence:.0%} confidence)[/dim]")
     grid.add_row("Priority", _priority_text(result.priority))
     grid.add_row("Category", f"{result.category}[dim] / {result.subcategory}[/dim]")
-    if result.suggested_team:
-        grid.add_row("Team", result.suggested_team)
-    if result.suggested_assignee:
-        grid.add_row("Assignee", result.suggested_assignee)
-    if result.estimated_resolution:
-        grid.add_row("Est. SLA", result.estimated_resolution)
+    if result.likely_fulfilling_team:
+        grid.add_row("Team", result.likely_fulfilling_team)
+    if result.likely_assignment_group:
+        grid.add_row("Assignment Group", result.likely_assignment_group)
 
     grid.add_row("", "")
-    grid.add_row("Summary", Text(result.summary, overflow="fold"))
+    grid.add_row("Rationale", Text(result.rationale, overflow="fold"))
+    if result.required_information_missing:
+        grid.add_row("Missing", ", ".join(result.missing_fields) or "unspecified")
 
     if result.suggested_actions:
         actions_text = Text()
@@ -155,11 +157,11 @@ def _render_result(ticket: Ticket, result: TriageResult, verbose: bool = False):
             actions_text.append(f"  {i}. {action}\n")
         grid.add_row("Actions", actions_text)
 
-    if result.escalate:
+    if result.escalation_required:
         grid.add_row(
             "",
             Text(
-                f"⚡ ESCALATE: {result.escalation_reason}",
+                f"⚡ ESCALATE: {result.escalation_reason or 'Review required'}",
                 style="bold white on dark_red",
             ),
         )
@@ -674,6 +676,44 @@ def _chat_plain(args, engine: TriageEngine, jsm: Optional[JSMClient]):
             console.print(f"[red]✗[/red] {exc}\n")
 
 
+def cmd_validate_config(args, engine, jsm):
+    cfg = load_app_config()
+    issues = validate_config(cfg)
+    if issues:
+        for issue in issues:
+            console.print(f"[red]✗[/red] {issue}")
+        sys.exit(2)
+    console.print("[green]✓[/green] Configuration valid")
+
+
+def cmd_knowledge_test(args, engine, jsm):
+    from .knowledge import KnowledgeRetriever
+    t = Ticket(key="TEST-0", summary=args.query, description=args.query, status="Open", priority="Medium", issue_type="Service Request", reporter="tester", assignee=None)
+    snippets = KnowledgeRetriever(engine.config, rovo_provider=engine._rovo_provider()).retrieve(t)
+    console.print_json(data=[s.to_dict() for s in snippets])
+
+
+def cmd_feedback(args, engine, jsm):
+    store = FeedbackStore()
+    store.record({
+        "ticket": args.ticket,
+        "outcome": args.outcome,
+        "final_category": args.final_category,
+        "final_assignment_group": args.final_assignment_group,
+    })
+    console.print(f"[green]✓[/green] Feedback recorded for {args.ticket}")
+
+
+def cmd_export_examples(args, engine, jsm):
+    n = FeedbackStore().export_examples(args.output)
+    console.print(f"[green]✓[/green] Exported {n} reviewed examples to {args.output}")
+
+
+def cmd_review_rules(args, engine, jsm):
+    proposals = FeedbackStore().candidate_rule_updates()
+    console.print_json(data=proposals)
+
+
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
@@ -739,6 +779,22 @@ def _build_parser() -> argparse.ArgumentParser:
     chat = sub.add_parser("chat", help="Interactive chat (optionally anchored to a ticket)")
     chat.add_argument("--ticket", "-t", metavar="KEY", help="Ticket key for context (e.g. IT-42)")
 
+    sub.add_parser("validate-config", help="Validate triage policy and routing configuration")
+
+    kt = sub.add_parser("knowledge-test", help="Test Rovo/local knowledge grounding")
+    kt.add_argument("--query", required=True, help="Knowledge query")
+
+    fb = sub.add_parser("feedback", help="Record reviewer outcome for a ticket")
+    fb.add_argument("ticket", help="Ticket key")
+    fb.add_argument("--outcome", choices=["accepted", "corrected", "rejected"], required=True)
+    fb.add_argument("--final-category")
+    fb.add_argument("--final-assignment-group")
+
+    ex = sub.add_parser("export-examples", help="Export reviewed examples corpus")
+    ex.add_argument("--output", default="config/triage_examples.generated.jsonl")
+
+    sub.add_parser("review-rules", help="Show candidate routing rule updates from reviewed feedback")
+
     return parser
 
 
@@ -790,7 +846,7 @@ def main():
 
     engine = TriageEngine(
         providers=providers,
-        dry_run=getattr(args, "dry_run", False),
+        dry_run=getattr(args, "dry_run", True),
     )
 
     jsm: Optional[JSMClient] = None
@@ -806,6 +862,11 @@ def main():
         "triage": cmd_triage,
         "watch":  cmd_watch,
         "chat":   cmd_chat,
+        "validate-config": cmd_validate_config,
+        "knowledge-test": cmd_knowledge_test,
+        "feedback": cmd_feedback,
+        "export-examples": cmd_export_examples,
+        "review-rules": cmd_review_rules,
     }
 
     cmd_fn = command_map.get(args.command)

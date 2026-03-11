@@ -1,0 +1,2 @@
+{"ticket":"IT-100","summary":"New starter needs Salesforce + Slack","category":"Onboarding","subcategory":"New starter provisioning","recommended_next_step":"fulfill","knowledge_sources_used":["policy:onboarding-standard"]}
+{"ticket":"IT-101","summary":"Need admin access no expiry","category":"Privileged Access","subcategory":"Break-glass access","recommended_next_step":"return_for_info","missing_fields":["duration_expiry","manager_approval"]}

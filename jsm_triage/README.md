@@ -248,3 +248,33 @@ OAuth tokens are stored in `~/.jsm_triage/tokens.json` with `0600` permissions
 alive without re-authenticating.
 
 Run `jsm-triage auth logout` to clear all stored tokens.
+
+
+## IAM/Access Triage Grounding
+
+The production triage flow is explicitly grounded via:
+
+1. **Local curated policy/rules/examples** from:
+   - `config/triage_policy.yaml`
+   - `config/routing_rules.yaml`
+   - `config/approval_rules.yaml`
+   - `config/triage_examples.jsonl`
+2. **Optional Rovo retrieval** using curated Confluence query seeds in `config/grounding.yaml`.
+
+Rovo grounding is adapter-based and depends on Atlassian licensing/API availability. If unavailable, triage still runs using local curated files.
+
+### New operations commands
+
+```bash
+jsm-triage validate-config
+jsm-triage knowledge-test --query "urgent termination access removal"
+jsm-triage feedback IT-42 --outcome corrected --final-category Offboarding --final-assignment-group IAM-L2
+jsm-triage review-rules
+jsm-triage export-examples --output config/triage_examples.generated.jsonl
+```
+
+## Safety defaults
+
+- Recommendation-first and dry-run by default.
+- Priority/comment/label writeback are disabled by default until feature flags are enabled.
+- AI output is advisory and requires human analyst review.
