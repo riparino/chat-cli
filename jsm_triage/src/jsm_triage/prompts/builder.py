@@ -3,8 +3,8 @@ Prompt construction pipeline for IAM triage.
 
 The PromptBuilder assembles the full user prompt for a triage request by combining:
   1. Ticket content (from the Ticket model)
-  2. Org context (from env/config)
-  3. Local routing rules and approval rules (from config files)
+  2. Org context and policy summary (from env/config)
+  3. Local routing rules, approval rules, and escalation indicators (from config files)
   4. Relevant Confluence/Rovo knowledge snippets (from grounding layer)
   5. Reviewed example tickets (from triage_examples.jsonl)
 
@@ -58,6 +58,9 @@ class KnowledgeSnippet:
 class PromptContext:
     """All grounding context to inject into a triage prompt."""
     org_context: Optional[str] = None
+    policy_summary_text: Optional[str] = None
+    vip_indicators: list[str] = field(default_factory=list)
+    urgent_termination_indicators: list[str] = field(default_factory=list)
     routing_rules_text: Optional[str] = None
     approval_rules_text: Optional[str] = None
     knowledge_snippets: list[KnowledgeSnippet] = field(default_factory=list)
@@ -65,7 +68,10 @@ class PromptContext:
 
     def has_grounding(self) -> bool:
         return bool(
-            self.routing_rules_text
+            self.policy_summary_text
+            or self.vip_indicators
+            or self.urgent_termination_indicators
+            or self.routing_rules_text
             or self.approval_rules_text
             or self.knowledge_snippets
             or self.example_snippets
@@ -126,19 +132,37 @@ class PromptBuilder:
         if ctx.org_context:
             parts.append(f"ORGANISATION CONTEXT:\n{ctx.org_context}")
 
-        # --- Section 4: Routing rules -----------------------------------
+        # --- Section 4: Policy summary and escalation indicators ---------
+        if ctx.policy_summary_text:
+            parts.append(f"POLICY SUMMARY (admin-curated):\n{ctx.policy_summary_text}")
+
+        if ctx.vip_indicators:
+            parts.append(
+                "VIP / HIGH-SENSITIVITY INDICATORS:\n"
+                + "\n".join(f"- {indicator}" for indicator in ctx.vip_indicators)
+            )
+
+        if ctx.urgent_termination_indicators:
+            parts.append(
+                "URGENT TERMINATION INDICATORS:\n"
+                + "\n".join(
+                    f"- {indicator}" for indicator in ctx.urgent_termination_indicators
+                )
+            )
+
+        # --- Section 5: Routing rules -----------------------------------
         if ctx.routing_rules_text:
             rules_truncated = ctx.routing_rules_text[:MAX_ROUTING_RULES_CHARS]
             if len(ctx.routing_rules_text) > MAX_ROUTING_RULES_CHARS:
                 rules_truncated += "\n... [routing rules truncated]"
             parts.append(f"ROUTING RULES (admin-curated):\n{rules_truncated}")
 
-        # --- Section 5: Approval rules ----------------------------------
+        # --- Section 6: Approval rules ----------------------------------
         if ctx.approval_rules_text:
             rules_truncated = ctx.approval_rules_text[:MAX_ROUTING_RULES_CHARS]
             parts.append(f"APPROVAL RULES (admin-curated):\n{rules_truncated}")
 
-        # --- Section 6: Knowledge snippets ------------------------------
+        # --- Section 7: Knowledge snippets ------------------------------
         if ctx.knowledge_snippets:
             snippet_blocks = []
             for snippet in ctx.knowledge_snippets:
@@ -148,7 +172,7 @@ class PromptBuilder:
                 + "\n\n".join(snippet_blocks)
             )
 
-        # --- Section 7: Reviewed examples -------------------------------
+        # --- Section 8: Reviewed examples -------------------------------
         if ctx.example_snippets:
             examples_text = "\n\n".join(
                 ctx.example_snippets[:MAX_EXAMPLES_TO_INJECT]
@@ -157,7 +181,7 @@ class PromptBuilder:
                 f"REVIEWED EXAMPLES (from approved historical tickets):\n{examples_text}"
             )
 
-        # --- Section 8: Grounding notice --------------------------------
+        # --- Section 9: Grounding notice --------------------------------
         if not ctx.has_grounding():
             parts.append(
                 "NOTE: No internal policy context or knowledge was available for this request. "
@@ -165,7 +189,7 @@ class PromptBuilder:
                 "Do not assume specific internal policies exist."
             )
 
-        # --- Section 9: Output instruction ------------------------------
+        # --- Section 10: Output instruction -----------------------------
         parts.append(
             "Respond with a JSON triage object exactly matching the schema in your instructions. "
             "No markdown. No prose outside the JSON object."

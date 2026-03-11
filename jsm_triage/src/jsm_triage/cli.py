@@ -323,6 +323,15 @@ def cmd_status(args, engine: TriageEngine, jsm: Optional[JSMClient]):
     config_table.add_column(min_width=22)
     config_table.add_column()
     config_table.add_row("Config dir", str(config_loader.config_dir()))
+    config_table.add_row(
+        "Policy summary",
+        "[green]loaded[/green]" if policy.policy_text else "[dim]not set[/dim]",
+    )
+    config_table.add_row("VIP indicators", str(len(policy.vip_indicators)))
+    config_table.add_row(
+        "Urgent term indicators",
+        str(len(policy.urgent_termination_indicators)),
+    )
     config_table.add_row("Routing rules", str(len(policy.routing_rules)))
     config_table.add_row("Approval rules", str(len(policy.approval_rules)))
     config_table.add_row("Triage examples", str(len(policy.examples)))

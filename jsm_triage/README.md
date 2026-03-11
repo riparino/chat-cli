@@ -2,11 +2,13 @@
 
 An enterprise-grade CLI that uses multiple AI backends to triage Atlassian Jira Service Management (JSM) tickets for **IAM, access management, and identity-related workflows**.
 
+The bundled sample policy pack is **Azure-first**: Entra ID, Microsoft 365, Azure subscriptions, Azure Key Vault, AKS, GitHub Enterprise, and Atlassian are the default assumptions in the docs, prompt examples, and local policy files.
+
 This is a **decision-support and triage-acceleration tool for human analysts and queue managers**. All recommendations are advisory and require human review before action.
 
 ## What it does
 
-- Classifies access requests (New Access, Access Change, Offboarding, Privileged Access, GitHub access, AWS IAM, Entra groups, shared mailboxes, licenses, MFA, etc.)
+- Classifies access requests (New Access, Access Change, Offboarding, Privileged Access, GitHub access, Azure RBAC, Entra groups, shared mailboxes, licenses, MFA, Intune, etc.)
 - Detects missing information (manager approval, business justification, access duration, target identity)
 - Determines whether approval is required and what type
 - Recommends the likely fulfilling team and assignment group
@@ -24,7 +26,7 @@ This is a **decision-support and triage-acceleration tool for human analysts and
 - **Multi-provider AI**: Azure OpenAI · GitHub Copilot · OpenAI/ChatGPT · Microsoft Copilot · Atlassian Rovo
 - **Automatic failover**: if the primary provider fails, the next one is tried
 - **Confluence grounding**: retrieve relevant policy pages at triage time (no Rovo licence needed)
-- **Local policy config**: routing rules, approval rules, reviewed examples – all admin-curated
+- **Local policy config**: policy summary, escalation indicators, routing rules, approval rules, and reviewed examples - all admin-curated
 - **Feedback loop**: capture human outcomes, export approved examples for future grounding
 - **Audit log**: every triage decision recorded at `~/.jsm_triage/audit.jsonl`
 - **Safe by default**: dry-run mode, no auto-assign, no auto-priority, explicit feature flags
@@ -77,7 +79,7 @@ jsm-triage chat
 jsm-triage chat --ticket IT-42
 ```
 
-> **Without installing:** `python -m jsm_triage <command>` works identically.
+> **Module entry point:** after installation, `python -m jsm_triage <command>` works the same as `jsm-triage <command>`.
 
 ---
 
@@ -134,7 +136,7 @@ TRIAGE_CONFIG_DIR=/path/to/config  # or use ~/.jsm_triage/config/
 Copy the bundled examples and customise them:
 
 ```bash
-cp -r jsm_triage/config/ ~/.jsm_triage/config/
+cp -r config/ ~/.jsm_triage/config/
 ```
 
 | File | Purpose |
@@ -168,12 +170,12 @@ result_limit: 5
 
 Test it:
 ```bash
-jsm-triage knowledge-test --query "AWS IAM role provisioning policy"
+jsm-triage knowledge-test --query "Azure Key Vault access policy"
 ```
 
 ### Mode B: Local policy files (always available)
 
-Routing rules, approval rules, and reviewed examples are loaded from config files and injected into every triage prompt. Works offline without Confluence access.
+Policy summary, VIP/urgent indicators, routing rules, approval rules, and reviewed examples are loaded from config files and injected into every triage prompt. Works offline without Confluence access.
 
 ### Mode C: Rovo (optional, requires licence)
 
@@ -246,7 +248,7 @@ Every triage result includes:
 |-------|-------------|
 | `request_type` | Specific description of the request |
 | `category` | IAM category (e.g. New Access Request, Offboarding) |
-| `subcategory` | Specific subcategory (e.g. GitHub org access, AWS IAM role) |
+| `subcategory` | Specific subcategory (e.g. GitHub org access, Azure Key Vault access) |
 | `business_impact` | Critical / High / Medium / Low |
 | `urgency` | Immediate / High / Standard / Low |
 | `priority` | Critical / High / Medium / Low |

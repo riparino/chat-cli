@@ -1,5 +1,5 @@
 # routing_rules.yaml
-# Category/subcategory → team routing rules.
+# Category/subcategory -> team routing rules.
 #
 # These rules are injected into every triage prompt to improve routing accuracy.
 # Rules are evaluated by the AI model using keyword matching and category inference;
@@ -14,8 +14,8 @@
 #   priority_hint:        Optional priority override hint (Critical/High/Medium/Low).
 #   notes:                Explanation for this rule (shown in review-rules output).
 #
-# ⚠ This file is admin-curated. Rules are injected as context, not enforced.
-#   The AI model uses these as guidance, not hard rules.
+# This file is admin-curated. Rules are injected as context, not enforced.
+# The AI model uses these as guidance, not hard rules.
 
 rules:
 
@@ -41,19 +41,27 @@ rules:
   # -----------------------------------------------------------------------
   - category: "Cloud / Infrastructure Access"
     subcategory_pattern: "azure rbac"
-    keywords: ["azure role", "rbac", "azure subscription", "azure resource group", "contributor", "owner role"]
+    keywords: ["azure role", "rbac", "azure subscription", "azure resource group", "contributor", "owner role", "user access administrator"]
     team: "Cloud Platform Team"
     assignment_group: "Cloud - Azure"
     priority_hint: "High"
-    notes: "Azure RBAC role assignments require Cloud Platform Team and often Security approval."
+    notes: "Azure RBAC role assignments require Cloud Platform Team review and often Security approval."
 
   - category: "Cloud / Infrastructure Access"
-    subcategory_pattern: "aws iam"
-    keywords: ["aws", "iam role", "s3", "ec2", "lambda", "eks", "aws access key"]
+    subcategory_pattern: "azure key vault"
+    keywords: ["key vault", "secret", "certificate", "vault access policy", "secrets officer", "keys officer"]
     team: "Cloud Platform Team"
-    assignment_group: "Cloud - AWS"
+    assignment_group: "Cloud - Azure Security"
     priority_hint: "High"
-    notes: "AWS IAM changes handled by Cloud Platform Team."
+    notes: "Azure Key Vault access is handled by Cloud Platform Team and may require Security approval."
+
+  - category: "Cloud / Infrastructure Access"
+    subcategory_pattern: "aks"
+    keywords: ["aks", "kubernetes", "cluster-admin", "namespace access", "kubectl"]
+    team: "Cloud Platform Team"
+    assignment_group: "Cloud - AKS"
+    priority_hint: "High"
+    notes: "AKS cluster and namespace access are handled by the Cloud Platform Team."
 
   - category: "Cloud / Infrastructure Access"
     keywords: ["vpn", "vpn access", "remote access", "tunnel"]
@@ -124,6 +132,12 @@ rules:
     keywords: ["servicenow", "snow", "itsm platform"]
     team: "IT Service Desk"
     assignment_group: "ITSM - Platform"
+
+  - category: "Application Access"
+    keywords: ["intune", "autopilot", "device compliance", "managed device"]
+    team: "Endpoint Engineering Team"
+    assignment_group: "Endpoint - Intune"
+    notes: "Intune and Autopilot access are handled by Endpoint Engineering."
 
   # -----------------------------------------------------------------------
   # Shared Mailbox / Distribution List

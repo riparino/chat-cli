@@ -29,9 +29,9 @@ def _write_routing_yaml(path: Path) -> None:
             assignment_group: "Dev Platform - GitHub"
             notes: "GitHub access"
           - category: "Cloud / Infrastructure Access"
-            keywords: ["aws", "ec2"]
+            keywords: ["azure", "subscription"]
             team: "Cloud Platform Team"
-            assignment_group: "Cloud - AWS"
+            assignment_group: "Cloud - Azure"
     """), encoding="utf-8")
 
 
@@ -62,13 +62,13 @@ def _write_examples_jsonl(path: Path) -> None:
         },
         {
             "ticket_key": "IT-002",
-            "summary": "AWS IAM admin access",
+            "summary": "Azure Owner role on production subscription",
             "category": "Privileged Access",
-            "subcategory": "AWS IAM role",
+            "subcategory": "Azure RBAC role",
             "recommended_next_step": "Pending Approval",
             "rationale": "Requires security approval.",
             "missing_fields": ["security_team_approval"],
-            "tags": ["aws", "privileged"],
+            "tags": ["azure", "privileged"],
         },
     ]
     path.write_text(
@@ -146,8 +146,10 @@ class TestLocalPolicyLoader:
         loader = LocalPolicyLoader(config_dir=str(tmp_path))
         config = loader.load()
         assert config.org_context == "We are Example Corp."
+        assert config.policy_text == "All access needs manager approval."
         assert "CTO" in config.vip_indicators
         assert "urgent termination" in config.urgent_termination_indicators
+        assert config.is_empty() is False
 
     def test_config_is_cached(self, tmp_path):
         _write_examples_jsonl(tmp_path / "triage_examples.jsonl")

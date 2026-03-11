@@ -32,9 +32,9 @@ The triage JSON schema has been completely replaced. The old generic schema is g
 **New schema (v2.0):**
 ```json
 {
-  "request_type": "AWS IAM role for production access",
+  "request_type": "Azure Owner role for production subscription",
   "category": "Cloud / Infrastructure Access",
-  "subcategory": "AWS IAM role",
+  "subcategory": "Azure RBAC role",
   "business_impact": "High",
   "urgency": "Standard",
   "priority": "High",
@@ -43,7 +43,7 @@ The triage JSON schema has been completely replaced. The old generic schema is g
   "required_information_missing": false,
   "missing_fields": [],
   "likely_fulfilling_team": "Cloud Platform Team",
-  "likely_assignment_group": "Cloud - AWS",
+  "likely_assignment_group": "Cloud - Azure",
   "suggested_actions": ["..."],
   "recommended_next_step": "Pending Approval",
   "escalation_required": false,
@@ -78,7 +78,7 @@ pip install pyyaml>=6.0
 
 Or reinstall the package:
 ```bash
-pip install -e "jsm_triage/[test]"
+cd jsm_triage && pip install -e ".[test]"
 ```
 
 ### 5. Package structure
@@ -173,7 +173,7 @@ Human outcomes are stored in `~/.jsm_triage/feedback.jsonl`. Approved examples c
 
 2. **Copy and customise config files:**
    ```bash
-   cp -r jsm_triage/config/ ~/.jsm_triage/config/
+   cp -r config/ ~/.jsm_triage/config/
    # Edit config files to match your org
    ```
 

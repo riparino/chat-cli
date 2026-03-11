@@ -13,12 +13,12 @@
 #                         "VP/Director Approval" | "Business Owner Approval"
 #   notes:                Explanation (shown in prompts and review output).
 #
-# ⚠ This file is admin-curated. It is injected as prompt context, not enforced.
+# This file is admin-curated. It is injected as prompt context, not enforced.
 
 rules:
 
   # -----------------------------------------------------------------------
-  # Privileged / High-Risk Access – Security Team Approval always required
+  # Privileged / High-Risk Access - Security Team Approval always required
   # -----------------------------------------------------------------------
   - category: "Privileged Access"
     requires_approval: true
@@ -29,29 +29,37 @@ rules:
 
   - category: "Cloud / Infrastructure Access"
     subcategory_pattern: "azure rbac"
-    keywords: ["owner", "contributor", "admin", "privileged"]
+    keywords: ["owner", "contributor", "user access administrator", "admin", "privileged"]
     requires_approval: true
     approval_type: "Security Team Approval"
     notes: >
-      Azure RBAC Contributor/Owner assignments require Security Team approval.
-      Reader-level assignments require Manager Approval only.
+      Azure RBAC Contributor, Owner, and User Access Administrator assignments
+      require Security Team approval. Reader-level assignments require Manager
+      Approval only.
 
   - category: "Cloud / Infrastructure Access"
-    subcategory_pattern: "aws iam"
-    keywords: ["admin", "AdministratorAccess", "poweruser", "privileged"]
+    subcategory_pattern: "azure key vault"
+    keywords: ["admin", "administrator", "secrets officer", "keys officer", "certificate officer"]
     requires_approval: true
     approval_type: "Security Team Approval"
-    notes: "AWS IAM admin/privileged policies require Security Team approval."
+    notes: "Azure Key Vault administrator and officer roles require Security Team approval."
+
+  - category: "Cloud / Infrastructure Access"
+    subcategory_pattern: "aks"
+    keywords: ["cluster-admin", "admin", "kubernetes admin", "privileged"]
+    requires_approval: true
+    approval_type: "Security Team Approval"
+    notes: "AKS cluster-admin and other privileged Kubernetes roles require Security Team approval."
 
   - category: "Cloud / Infrastructure Access"
     subcategory_pattern: "production"
-    keywords: ["production", "prod environment", "live environment"]
+    keywords: ["production", "prod subscription", "prod environment", "live environment"]
     requires_approval: true
     approval_type: "Manager Approval"
-    notes: "Production environment access requires manager approval."
+    notes: "Production subscription and environment access require manager approval."
 
   # -----------------------------------------------------------------------
-  # Standard Access Requests – Manager Approval required
+  # Standard Access Requests - Manager Approval required
   # -----------------------------------------------------------------------
   - category: "New Access Request"
     requires_approval: true
@@ -79,7 +87,7 @@ rules:
     notes: "License assignments require manager approval for cost governance."
 
   # -----------------------------------------------------------------------
-  # Contractor / Vendor Access – additional requirements
+  # Contractor / Vendor Access - additional requirements
   # -----------------------------------------------------------------------
   - category: "New Access Request"
     keywords: ["contractor", "vendor", "third party", "external", "consultant", "agency"]
@@ -115,11 +123,11 @@ rules:
     requires_approval: true
     approval_type: "Security Team Approval"
     notes: >
-      Service account creation requires Security Team approval.
+      Service account and managed identity creation require Security Team approval.
       The request must include: purpose, owning team, access scope, rotation schedule.
 
   # -----------------------------------------------------------------------
-  # Access Removal – generally does not require approval but may need verification
+  # Access Removal - generally does not require approval but may need verification
   # -----------------------------------------------------------------------
   - category: "Access Removal"
     requires_approval: false

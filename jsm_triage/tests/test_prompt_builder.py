@@ -80,6 +80,25 @@ class TestPromptBuilderBuild:
         assert "ACME Corporation" in prompt
         assert "ORGANISATION CONTEXT" in prompt
 
+    def test_policy_summary_injected(self):
+        builder = PromptBuilder()
+        ctx = PromptContext(policy_summary_text="Production Azure RBAC changes require approval.")
+        prompt = builder.build(_make_ticket(), context=ctx)
+        assert "POLICY SUMMARY" in prompt
+        assert "Production Azure RBAC changes require approval." in prompt
+
+    def test_indicator_lists_injected(self):
+        builder = PromptBuilder()
+        ctx = PromptContext(
+            vip_indicators=["CTO"],
+            urgent_termination_indicators=["urgent termination"],
+        )
+        prompt = builder.build(_make_ticket(), context=ctx)
+        assert "VIP / HIGH-SENSITIVITY INDICATORS" in prompt
+        assert "URGENT TERMINATION INDICATORS" in prompt
+        assert "CTO" in prompt
+        assert "urgent termination" in prompt
+
     def test_routing_rules_injected(self):
         builder = PromptBuilder()
         ctx = PromptContext(routing_rules_text="Route GitHub access to DevPlatform Team.")
@@ -210,6 +229,18 @@ class TestPromptContextHasGrounding:
     def test_org_context_alone_not_grounding(self):
         ctx = PromptContext(org_context="Some context")
         assert ctx.has_grounding() is False
+
+    def test_policy_summary_is_grounding(self):
+        ctx = PromptContext(policy_summary_text="Azure production access needs approval")
+        assert ctx.has_grounding() is True
+
+    def test_vip_indicators_are_grounding(self):
+        ctx = PromptContext(vip_indicators=["CTO"])
+        assert ctx.has_grounding() is True
+
+    def test_urgent_termination_indicators_are_grounding(self):
+        ctx = PromptContext(urgent_termination_indicators=["urgent termination"])
+        assert ctx.has_grounding() is True
 
     def test_routing_rules_is_grounding(self):
         ctx = PromptContext(routing_rules_text="Some rules")

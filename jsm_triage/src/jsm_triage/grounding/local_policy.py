@@ -44,8 +44,13 @@ except ImportError:
         "Run: pip install pyyaml"
     )
 
-# Package config directory (bundled examples)
-_PACKAGE_CONFIG_DIR = Path(__file__).parent.parent.parent.parent.parent / "config"
+# Bundled config directories.
+# In a source checkout, examples live at <repo>/config/.
+# If examples are later packaged inside the module, prefer that path first.
+_PACKAGE_CONFIG_DIR_CANDIDATES = [
+    Path(__file__).resolve().parents[1] / "config",
+    Path(__file__).resolve().parents[3] / "config",
+]
 # User config directory
 _USER_CONFIG_DIR = Path.home() / ".jsm_triage" / "config"
 
@@ -98,7 +103,14 @@ class PolicyConfig:
     policy_text: Optional[str] = None   # raw triage_policy.yaml summary text
 
     def is_empty(self) -> bool:
-        return not (self.routing_rules or self.approval_rules or self.examples)
+        return not (
+            self.routing_rules
+            or self.approval_rules
+            or self.examples
+            or self.policy_text
+            or self.vip_indicators
+            or self.urgent_termination_indicators
+        )
 
 
 @dataclass
@@ -150,11 +162,12 @@ class LocalPolicyLoader:
         if _USER_CONFIG_DIR.is_dir():
             return _USER_CONFIG_DIR
 
-        if _PACKAGE_CONFIG_DIR.is_dir():
-            return _PACKAGE_CONFIG_DIR
+        for candidate in _PACKAGE_CONFIG_DIR_CANDIDATES:
+            if candidate.is_dir():
+                return candidate
 
         logger.debug("No config directory found; using empty policy config")
-        return _PACKAGE_CONFIG_DIR  # may not exist, handled gracefully
+        return _PACKAGE_CONFIG_DIR_CANDIDATES[-1]  # may not exist, handled gracefully
 
     def config_dir(self) -> Path:
         return self._config_dir

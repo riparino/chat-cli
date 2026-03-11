@@ -276,6 +276,9 @@ class TriageEngine:
 
         return PromptContext(
             org_context=org_context or None,
+            policy_summary_text=policy.policy_text or None,
+            vip_indicators=policy.vip_indicators,
+            urgent_termination_indicators=policy.urgent_termination_indicators,
             routing_rules_text=self._policy_loader.render_routing_rules_text(),
             approval_rules_text=self._policy_loader.render_approval_rules_text(),
             knowledge_snippets=knowledge_snippets,

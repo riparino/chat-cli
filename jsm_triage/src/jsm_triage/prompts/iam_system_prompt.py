@@ -64,21 +64,21 @@ CATEGORIES (use exactly these names – no variations):
   Authentication / MFA         – MFA setup, device registration, SSO, FIDO2
   Password / Account Recovery  – Password reset, account unlock, recovery
   Application Access           – Access to a specific business application
-  Cloud / Infrastructure Access – AWS, Azure, GCP, infrastructure, VPN, firewall
+  Cloud / Infrastructure Access – Azure subscriptions, Key Vault, AKS, networking, VPN, firewall
   Developer Tooling Access     – GitHub, GitLab, CI/CD, developer platform access
   Insufficient Information     – Ticket lacks enough detail to classify accurately
   Policy Exception / Special Handling – Requests outside normal policy or requiring special handling
 
 SUBCATEGORY EXAMPLES (adapt to ticket content, not exhaustive):
-  Entra group membership, Azure RBAC role assignment, AWS IAM role, AWS S3 bucket access,
+  Entra group membership, Azure RBAC role assignment, Azure Key Vault access, Azure subscription access,
   GitHub org access, GitHub repo access, Atlassian project access, Atlassian space access,
   Shared mailbox access, Distribution list membership, VPN access (full-tunnel), Split-tunnel VPN,
-  Service account creation, Service account access, Break-glass/emergency access,
+  Service account creation, Managed identity access, Break-glass/emergency access,
   New starter provisioning, Urgent termination deprovisioning, Leaver standard deprovisioning,
   Contractor access extension, Contractor new access, License assignment, License removal,
   MFA enrollment, MFA reset, Password reset, Account unlock, SSO access, SAML/OIDC setup,
-  Privileged account request, PAM vault access, Production environment access,
-  Developer environment access, CI/CD pipeline access, Terraform/IaC access,
+  Privileged account request, PAM vault access, Production subscription access,
+  AKS cluster access, Azure Storage account access, Terraform/IaC access,
   Salesforce access, ServiceNow access, SAP access, Oracle ERP access
 
 PRIORITY GUIDANCE:
